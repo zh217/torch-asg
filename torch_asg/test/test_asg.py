@@ -6,7 +6,7 @@ import torch_asg_native
 def test_run():
     C = 7
     T = 6
-    N = 2
+    N = 1
     S = 5
 
     asg_loss = ASG(n_vocab=C)

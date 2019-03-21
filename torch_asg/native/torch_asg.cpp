@@ -67,9 +67,16 @@ fac_forward(
         for (int n = 0; n != N; ++n) {
             for (int s = 0; s != S; ++s) {
                 auto s1 = trans_self[n][s] + alpha[t - 1][n][s];
-                auto s2 = trans_next[n][s] + alpha[t - 1][n][s - 1];
+                std::cout << t << ' ' << n << ' ' << s << ' ' << s1.data<float>()[0] << ' ';
+                if (s > 0) {
+                    auto s2 = trans_next[n][s] + alpha[t - 1][n][s - 1];
+                    std::cout << s2.data<float>()[0] << ' ';
+                    s1 = at::logsumexp(at::stack({s1, s2}), 0);
+                    std::cout << s1.data<float>()[0] << ' ';
+                }
 // FIXME should be logadd instead
-                alpha[t][n][s] = inputs[t][n][targets[n][s]] + at::logsumexp(at::stack({s1, s2}), 0);
+                alpha[t][n][s] = inputs[t][n][targets[n][s]] + s1;
+                std::cout << alpha[t][n][s].data<float>()[0] << '\n';
             }
         }
     }
