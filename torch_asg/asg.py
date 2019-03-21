@@ -15,5 +15,6 @@ class ASG(nn.Module):
         self.transition = nn.Parameter(torch.ones(n_vocab, n_vocab))
 
     def forward(self, log_probs, targets, input_lengths, target_lengths, reduction='none', scale_mode='none'):
-        print(torch_asg_native.fac_forward(log_probs, targets, self.transition))
+        result = torch_asg_native.fac_forward(log_probs, targets, self.transition)
+        print(result)
         # return FCC.apply(log_probs, targets, self.transition) - FAC.apply(log_probs, targets, self.transition)
