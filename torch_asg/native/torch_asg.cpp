@@ -34,7 +34,7 @@ fac_forward(
     auto S = targets.size(1);
 
     std::cout << "\nSizes: T " << T << ", N " << N << ", C " << C << ", S " << S << '\n';
-    auto alpha = at::empty_like(inputs);
+    auto alpha = at::empty({T, N, S}, torch::CPU(at::kFloat));
 
     // alpha[0, n, _] <- -inf
     // alpha[0, n, 0] <- inputs[0, n, targets[n, 0]]

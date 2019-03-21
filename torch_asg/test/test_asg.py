@@ -17,4 +17,5 @@ def test_run():
 
     result = torch_asg_native.fac_forward(torch.randn(T, N, C),
                                           torch.randint(0, C, (N, S)), asg_loss.transition)
-    print(result)
+    print(result[0].shape)
+    print(result[0])
