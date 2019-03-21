@@ -3,7 +3,7 @@ import torch.autograd
 
 class FAC(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, inp, target):
+    def forward(ctx, inp, target, transition):
         # C: # chars
         # T: input length
         # N: batch size
