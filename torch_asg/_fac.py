@@ -1,32 +1,30 @@
 import torch.autograd
+import torch_asg_native
 
 
 class FAC(torch.autograd.Function):
     @staticmethod
-    def forward(ctx, inp, target, transition):
-        # C: # chars
-        # T: input length
-        # N: batch size
-        # S: target length
-        # targets    N * S
-        # inputs     T * N * C
-        # result     N
-        # scale      N
-        # alpha      T * N * S
-        # transition C * C
-        # trans_next N * S
-        # trans_self N * S
-
-        # prepare trans_next and trans_self (necessary??)
-        # alpha[0, n, _] <- -inf
-        # alpha[0, n, 0] <- inputs[0, n, targets[n, 0]]
-        # iterate over t <- T:
-        #   s1 <- trans_self[n, s] + alpha[t - 1, n, s]
-        #   s2 <- trans_next[n, s] + alpha[t - 1, n, s - 1]
-        #   alpha[t, n, s] <- inputs[t, n, targets[n, s]] + logadd(s1, s2)
-
-        pass
+    def forward(ctx,
+                transition,
+                log_probs,
+                targets,
+                input_lengths,
+                target_lengths,
+                reduction='none',
+                scale_mode='none'):
+        outputs = torch_asg_native.fac_forward(log_probs,
+                                               targets,
+                                               input_lengths,
+                                               target_lengths,
+                                               transition,
+                                               reduction,
+                                               scale_mode)
+        alpha, trans_next, trans_self, loss = outputs
+        ctx.save_for_backward(alpha, trans_next, trans_self, loss)
+        return loss
 
     @staticmethod
     def backward(ctx, grad_loss):
-        pass
+        alpha, trans_next, trans_self, result = ctx.saved_variables
+        grad_transition, grad_log_probs = torch_asg_native.fac_backward()
+        return grad_transition, grad_log_probs, None, None, None, None, None, None

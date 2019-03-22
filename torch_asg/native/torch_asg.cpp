@@ -4,17 +4,21 @@
 #include <vector>
 #include <limits>
 
-at::Tensor d_sigmoid(at::Tensor z) {
-    auto s = at::sigmoid(z);
+torch::Tensor d_sigmoid(torch::Tensor z) {
+    auto s = torch::sigmoid(z);
     return (1 - s) * s;
 }
 
 
-std::vector<at::Tensor>
+std::vector<torch::Tensor>
 fac_forward(
-        at::Tensor inputs,
-        at::Tensor targets,
-        at::Tensor transition
+        const torch::Tensor &transition,
+        const torch::Tensor &inputs,
+        const torch::Tensor &targets,
+        const torch::Tensor &input_lengths,
+        const torch::Tensor &target_lengths,
+        const std::string &reduction,
+        const std::string &scale_mode
 ) {
 // C: # chars
 // T: input length
@@ -34,18 +38,19 @@ fac_forward(
     auto S = targets.size(1);
 
     std::cout << "\nSizes: T " << T << ", N " << N << ", C " << C << ", S " << S << '\n';
-    auto alpha = at::empty({T, N, S}, torch::CPU(at::kFloat));
+    auto alpha = torch::empty({T, N, S}, torch::TensorOptions().requires_grad(false));
+    alpha.fill_(-std::numeric_limits<float>::infinity());
+
+    auto result = torch::empty({N}, torch::TensorOptions().requires_grad(false));
 
     // alpha[0, n, _] <- -inf
     // alpha[0, n, 0] <- inputs[0, n, targets[n, 0]]
-    alpha[0] = -std::numeric_limits<float>::infinity();
     for (int n = 0; n != N; ++n) {
         alpha[0][n][0] = 0;
     }
 
-    // FIXME: how do I get rid of the gradfunc non-sense?
-    auto trans_next = at::zeros({N, S}, torch::CPU(at::kFloat));
-    auto trans_self = at::zeros({N, S}, torch::CPU(at::kFloat));
+    auto trans_next = torch::zeros({N, S}, torch::TensorOptions().requires_grad(false));
+    auto trans_self = torch::zeros({N, S}, torch::TensorOptions().requires_grad(false));
 
     for (int n = 0; n != N; ++n) {
         auto prev_target = targets[0][0];
@@ -71,22 +76,29 @@ fac_forward(
                 if (s > 0) {
                     auto s2 = trans_next[n][s] + alpha[t - 1][n][s - 1];
                     std::cout << s2.data<float>()[0] << ' ';
-                    s1 = at::logsumexp(at::stack({s1, s2}), 0);
+                    s1 = torch::logsumexp(torch::stack({s1, s2}), 0);
                     std::cout << s1.data<float>()[0] << ' ';
                 }
-// FIXME should be logadd instead
                 alpha[t][n][s] = inputs[t][n][targets[n][s]] + s1;
                 std::cout << alpha[t][n][s].data<float>()[0] << '\n';
             }
         }
     }
 
-    return {alpha, trans_next, trans_self};
+    for (int n = 0; n != N; ++n) {
+        result[n] = alpha[input_lengths[n] - 1][n][target_lengths[n] - 1];
+    }
+
+    return {alpha, trans_next, trans_self, result};
 }
 
 
-void fac_backward() {
-
+std::vector<torch::Tensor> fac_backward(
+        const torch::Tensor &alpha
+) {
+    auto beta = torch::empty_like(alpha);
+    beta.fill_(-std::numeric_limits<float>::infinity());
+    return {beta};
 }
 
 
@@ -101,5 +113,6 @@ void fcc_backward() {
 #ifdef TORCH_EXTENSION_NAME
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("fac_forward", &fac_forward, "FAC forward");
+    m.def("fac_backward", &fac_backward, "FAC backward");
 }
 #endif
