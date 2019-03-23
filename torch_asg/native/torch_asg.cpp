@@ -149,6 +149,7 @@ namespace torch_asg {
                             inputs_cur_frame_a[targets_cur_batch_a[0]];
                 }
 
+                // parallel potential
                 for (int64_t s = target_frame_lower; s < target_frame_upper; ++s) {
                     scalar_t hori_route = self_trans_cur_batch_a[s] + alpha_prev_frame_a[s];
                     scalar_t diag_route = next_trans_cur_batch_a[s] + alpha_prev_frame_a[s - 1];
@@ -176,10 +177,65 @@ namespace torch_asg {
 
     template<typename scalar_t, at::ScalarType target_scalar_type>
     std::vector<at::Tensor> fac_loss_backward_cpu_template(
-
+            const at::Tensor &grad_out,
+            const at::Tensor &transition, // num_labels * num_labels
+            const at::Tensor &inputs, // batch_input_len * batch_size * num_labels
+            const at::Tensor &targets, // batch_size * target_len
+            IntArrayRef input_lengths, // batch_size
+            IntArrayRef target_lengths, // batch_size
+            const std::string &reduction,
+            const std::string &scale_mode,
+            const at::Tensor &alpha,
+            const at::Tensor &scale,
+            const at::Tensor &self_trans,
+            const at::Tensor &next_trans,
+            int64_t batch_input_len,
+            int64_t batch_target_len,
+            int64_t batch_size,
+            int64_t num_labels
     ) {
-        return {};
+        at::Tensor beta_cur = at::empty({batch_size, batch_target_len}, alpha.options());
+        at::Tensor beta_next = at::empty({batch_size, batch_input_len}, alpha.options());
+        at::Tensor grad_transition = at::zeros_like(transition);
+        at::Tensor grad_inputs = at::zeros_like(inputs);
+        at::Tensor grad_self_trans = at::zeros_like(self_trans);
+        at::Tensor grad_next_trans = at::zeros_like(next_trans);
+
+#pragma omp parallel for
+        for (int64_t b = 0; b < batch_size; ++b) {
+            int64_t input_length = std::min(input_lengths[b], batch_input_len);
+            int64_t target_length = std::min(target_lengths[b], batch_target_len);
+
+            // beta recursion
+            for (int64_t t = input_length - 1; t > 0; --t) {
+                int64_t target_frame_lower = t > input_length - target_length ? target_length - (input_length - t) : 0;
+                int64_t target_frame_upper = t < target_length ? t + 1 : target_length; // in range(1, target_length)
+
+                // parallel potential
+                for (int64_t s = target_frame_lower; s < target_frame_upper; ++s) {
+
+                }
+            }
+
+            for (int64_t s = 0; s < target_length; ++s) {
+
+            }
+        }
+
+        for (int64_t b = 0; b < batch_size; ++b) {
+
+        }
+
+        return {grad_transition, grad_inputs};
     }
+
+
+    template<typename scalar_t, at::ScalarType target_scalar_type>
+    std::vector<at::Tensor> fcc_loss_cpu_template(
+    ) {}
+
+    template<typename scalar_t, at::ScalarType target_scalar_type>
+    std::vector<at::Tensor> fcc_loss_backward_cpu_template() {}
 }
 //
 //std::vector<torch::Tensor>
