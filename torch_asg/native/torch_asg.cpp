@@ -357,12 +357,69 @@ std::vector<at::Tensor> fcc_loss_cpu_template(
     auto inputs_bf_a = inputs_bf.accessor<scalar_t>(3);
     auto targets_a = targets.accessor<target_t>(2);
     auto alpha_a = alpha.accessor<scalar_t>(3);
+    auto alpha_max_idx_a = alpha_max_idx.accessor<target_t>(2);
 
 #pragma omp parallel for
     for (int64_t b = 0; b < batch_size; ++b) {
+        int64_t input_length = std::min(input_lengths[b], batch_input_len);
+        int64_t target_length = std::min(target_lengths[b], batch_target_len);
+        auto alpha_cur_batch_a = alpha_a[b];
+        auto inputs_cur_batch_a = inputs_bf_a[b];
+        auto alpha_max_idx_cur_batch_a = alpha_max_idx_a[b];
+
+        for (int64_t n = 0; n < num_labels; ++n) {
+            alpha_cur_batch_a[0][n] = inputs_cur_batch_a[0][n];
+        }
+
+        // This double loop implements the generalized matrix multiplication over the log semi-ring
+        for (int64_t t = 1; t < input_length; ++t) {
+            auto alpha_prev_frame_a = alpha_cur_batch_a[t - 1];
+            auto alpha_cur_frame_a = alpha_cur_batch_a[t];
+            auto alpha_max_idx_cur_frame_a = alpha_max_idx_cur_batch_a[t];
+            auto inputs_cur_frame_a = inputs_cur_batch_a[t];
+
+            for (int64_t n = 0; n < num_labels; ++n) {
+                scalar_t sum = 0.;
+                scalar_t max = neg_inf;
+
+                for (int64_t n2 = 0; n2 < num_labels; ++n2) {
+                    scalar_t z = transition_a[n][n2] + alpha_prev_frame_a[n2];
+                    if (max < z) {
+                        alpha_max_idx_cur_frame_a[n] = n2;
+                        max = z;
+                    }
+                }
+
+                for (int64_t n2 = 0; n2 < num_labels; ++n2) {
+                    scalar_t z = transition_a[n][n2] + alpha_prev_frame_a[n2];
+                    sum += std::exp(z - max);
+                }
+
+                alpha_cur_frame_a[n] = max + std::log(sum) + inputs_cur_frame_a[n];
+            }
+        }
+
+
+        // The final (semi-ring) sum
+        auto alpha_cur_frame_a = alpha_cur_batch_a[input_length - 1];
+        scalar_t sum = 0.;
+        scalar_t max = neg_inf;
+
+        for (int64_t n = 0; n < num_labels; ++n) {
+            if (max < alpha_cur_frame_a[n]) {
+                max = alpha_cur_frame_a[n];
+            }
+        }
+
+        for (int64_t n = 0; n < num_labels; ++n) {
+            sum += std::exp(alpha_cur_frame_a[n] - max);
+        }
+
+        scale[b] = scale_fn(num_labels, input_length, target_length);
+        out[b] = (std::log(sum) + max) * scale[b];
     }
 
-    return {};
+    return {out, alpha, alpha_max_idx, scale};
 }
 
 template<typename scalar_t, at::ScalarType target_scalar_type>
