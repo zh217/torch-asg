@@ -68,7 +68,7 @@ CriterionScaleFn get_scale_fn(const std::string &scale_mode) {
 
 template<typename scalar_t, at::ScalarType target_scalar_type>
 std::vector<at::Tensor> fac_loss_cpu_template(
-        const at::Tensor &transition, // num_labels * num_labels
+        const at::Tensor &transition, // num_labels * num_labels, transition[i][j] is transition from j to i
         const at::Tensor &inputs, // batch_input_len * batch_size * num_labels
         const at::Tensor &targets, // batch_size * target_len
         IntArrayRef input_lengths, // batch_size
@@ -180,7 +180,6 @@ std::vector<at::Tensor> fac_loss_cpu_template(
         out[b] = alpha_cur_batch_a[input_length - 1][target_length - 1];
     }
 
-
     return {out, alpha, scale, self_trans, next_trans};
 }
 
@@ -195,17 +194,16 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
         const at::Tensor &alpha,
         const at::Tensor &scale,
         const at::Tensor &self_trans,
-        const at::Tensor &next_trans,
-        int64_t batch_input_len,
-        int64_t batch_target_len,
-        int64_t batch_size,
-        int64_t num_labels
+        const at::Tensor &next_trans
 ) {
 
     using target_t = typename std::conditional<target_scalar_type == at::kInt, int, int64_t>::type;
 
-    at::Tensor beta_cur = at::empty({batch_size, batch_target_len}, alpha.options());
-    at::Tensor beta_prev = at::empty({batch_size, batch_input_len}, alpha.options());
+    int64_t batch_input_len = inputs.size(0);
+    int64_t batch_target_len = targets.size(1);
+    int64_t batch_size = inputs.size(1);
+    int64_t num_labels = inputs.size(2);
+
     at::Tensor grad_transition = at::zeros({num_labels, num_labels}, alpha.options());
     at::Tensor grad_inputs = at::zeros_like(inputs);
     at::Tensor grad_self_trans = at::zeros_like(self_trans);
@@ -213,8 +211,6 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
 
     auto grad_inputs_bf = grad_inputs.permute({1, 0, 2});
 
-    auto beta_cur_a = beta_cur.accessor<scalar_t>(2);
-    auto beta_prev_a = beta_prev.accessor<scalar_t>(2);
     auto grad_transition_a = grad_transition.accessor<scalar_t>(2);
     auto grad_inputs_bf_a = grad_inputs_bf.accessor<scalar_t>(3);
     auto grad_self_trans_a = grad_self_trans.accessor<scalar_t>(2);
@@ -229,6 +225,9 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
 
 #pragma omp parallel for
     for (int64_t b = 0; b < batch_size; ++b) {
+        at::Tensor beta_cur = at::empty({batch_target_len}, alpha.options());
+        at::Tensor beta_prev = at::empty({batch_input_len}, alpha.options());
+
         const scalar_t grad_batch = scale[b] * grad_out[b];
         int64_t input_length = std::min(input_lengths[b], batch_input_len);
         int64_t target_length = std::min(target_lengths[b], batch_target_len);
@@ -240,10 +239,13 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
         auto self_trans_cur_batch_a = self_trans_a[b]; // batch_target_len
         auto next_trans_cur_batch_a = next_trans_a[b]; // batch_target_len
 
-        beta_cur_a[target_length - 1] = 1.;
+        beta_cur[target_length - 1] = 1.;
 
         // beta recursion
         for (int64_t t = input_length - 1; t > 0; --t) {
+            auto beta_cur_a = beta_cur.accessor<scalar_t>(1);
+            auto beta_prev_a = beta_prev.accessor<scalar_t>(1);
+
             auto grad_input_cur_frame_a = grad_input_cur_batch_a[t];
             auto alpha_prev_frame_a = alpha_cur_batch_a[t - 1];
 
@@ -286,7 +288,6 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
                 }
             }
 
-            std::swap(beta_cur_a, beta_prev_a);
             std::swap(beta_cur, beta_prev);
         }
     }
@@ -378,24 +379,24 @@ std::vector<at::Tensor> fcc_loss_cpu_template(
             auto alpha_max_idx_cur_frame_a = alpha_max_idx_cur_batch_a[t];
             auto inputs_cur_frame_a = inputs_cur_batch_a[t];
 
-            for (int64_t n = 0; n < num_labels; ++n) {
+            for (int64_t n_next = 0; n_next < num_labels; ++n_next) {
                 scalar_t sum = 0.;
                 scalar_t max = neg_inf;
 
-                for (int64_t n2 = 0; n2 < num_labels; ++n2) {
-                    scalar_t z = transition_a[n][n2] + alpha_prev_frame_a[n2];
+                for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
+                    scalar_t z = transition_a[n_next][n_cur] + alpha_prev_frame_a[n_cur];
                     if (max < z) {
-                        alpha_max_idx_cur_frame_a[n] = n2;
+                        alpha_max_idx_cur_frame_a[n_next] = n_cur;
                         max = z;
                     }
                 }
 
-                for (int64_t n2 = 0; n2 < num_labels; ++n2) {
-                    scalar_t z = transition_a[n][n2] + alpha_prev_frame_a[n2];
+                for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
+                    scalar_t z = transition_a[n_next][n_cur] + alpha_prev_frame_a[n_cur];
                     sum += std::exp(z - max);
                 }
 
-                alpha_cur_frame_a[n] = max + std::log(sum) + inputs_cur_frame_a[n];
+                alpha_cur_frame_a[n_next] = max + std::log(sum) + inputs_cur_frame_a[n_next];
             }
         }
 
@@ -423,8 +424,119 @@ std::vector<at::Tensor> fcc_loss_cpu_template(
 }
 
 template<typename scalar_t, at::ScalarType target_scalar_type>
-std::vector<at::Tensor> fcc_loss_backward_cpu_template() {
-    return {};
+std::vector<at::Tensor> fcc_loss_backward_cpu_template(
+        const at::Tensor &grad_out,
+        const at::Tensor &transition,
+        const at::Tensor &inputs, // batch_input_len * batch_size * num_labels
+        const at::Tensor &targets, // batch_size * target_len
+        IntArrayRef input_lengths, // batch_size
+        IntArrayRef target_lengths, // batch_size
+        const at::Tensor &alpha,
+        const at::Tensor &alpha_max_idx,
+        const at::Tensor &scale
+) {
+    constexpr scalar_t neg_inf = -std::numeric_limits<scalar_t>::infinity();
+    using target_t = typename std::conditional<target_scalar_type == at::kInt, int, int64_t>::type;
+
+    int64_t batch_input_len = inputs.size(0);
+    int64_t batch_target_len = targets.size(1);
+    int64_t batch_size = inputs.size(1);
+    int64_t num_labels = inputs.size(2);
+
+    at::Tensor grad_transition = at::zeros({batch_size, num_labels, num_labels}, alpha.options());
+    at::Tensor grad_inputs = at::zeros_like(inputs);
+
+    auto transition_a = transition.accessor<scalar_t>(2);
+    auto grad_transition_a = grad_transition.accessor<scalar_t>(3);
+    auto inputs_bf = inputs.permute({1, 0, 2}); // bf for batch-first
+    auto inputs_bf_a = inputs_bf.accessor<scalar_t>(3);
+    auto alpha_a = alpha.accessor<scalar_t>(3);
+    auto alpha_max_idx_a = alpha_max_idx.accessor<scalar_t>(2);
+
+#pragma omp parallel for
+    for (int64_t b = 0; b < batch_size; ++b) {
+        int64_t input_length = std::min(input_lengths[b], batch_input_len);
+        int64_t target_length = std::min(target_lengths[b], batch_target_len);
+        at::Tensor beta_cur = at::empty({num_labels}, alpha.options());
+        at::Tensor beta_next = at::empty({num_labels}, alpha.options());
+
+
+        const scalar_t batch_grad = scale[b] * grad_out[b];
+        auto grad_transition_cur_batch_a = grad_transition_a[b];
+        auto grad_inputs_cur_batch_a = inputs_bf_a[b];
+        auto alpha_cur_batch_a = alpha_a[b];
+        auto alpha_max_idx_cur_batch_a = alpha_max_idx_a[b];
+
+        // t = T - 1
+        {
+            auto alpha_cur_frame_a = alpha_cur_batch_a[input_length - 1];
+            auto grad_inputs_cur_frame_a = grad_transition_cur_batch_a[input_length - 1];
+            auto beta_cur_a = beta_cur.accessor<scalar_t>(1);
+
+            scalar_t max = neg_inf;
+            scalar_t sum = 0.;
+
+            for (int64_t n = 0; n < num_labels; ++n) {
+                if (max < alpha_cur_frame_a[n]) {
+                    max = alpha_cur_frame_a[n];
+                }
+            }
+
+            for (int64_t n = 0; n < num_labels; ++n) {
+                sum += std::exp(alpha_cur_frame_a[n] - max);
+            }
+
+            for (int64_t n = 0; n < num_labels; ++n) {
+                beta_cur_a[n] = std::exp(alpha_cur_frame_a[n] - max) / sum;
+                grad_inputs_cur_frame_a[n] = beta_cur_a[n] * batch_grad;
+            }
+            std::swap(beta_cur, beta_next);
+        }
+
+        // t = T - 2 .. 0
+        for (int64_t t = target_length - 2; t >= 0; --t) {
+            auto alpha_cur_frame_a = alpha_cur_batch_a[t];
+            auto alpha_max_idx_next_frame_a = alpha_max_idx_cur_batch_a[t + 1];
+            auto grad_inputs_cur_frame_a = grad_transition_cur_batch_a[t];
+            auto beta_cur_a = beta_cur.accessor<scalar_t>(1);
+            auto beta_next_a = beta_next.accessor<scalar_t>(1);
+
+            at::Tensor m = at::empty({num_labels, num_labels}, alpha.options());
+            auto m_a = m.accessor<scalar_t>(2);
+
+            for (int64_t n_next = 0; n_next < num_labels; ++n_next) {
+                scalar_t max = transition_a[n_next][alpha_max_idx_next_frame_a[n_next]] +
+                               alpha_cur_frame_a[alpha_max_idx_next_frame_a[n_next]];
+                scalar_t sum = 0.;
+                auto m_cur_a = m_a[n_next];
+                auto transition_cur_a = transition_a[n_next];
+
+                for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
+                    m_a[n_cur] = std::exp(transition_a[n_cur] + alpha_cur_frame_a[n_cur] - max);
+                    sum += m_a[n_cur];
+                }
+
+                for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
+                    m_cur_a[n_cur] /= sum;
+                }
+            }
+
+            for (int64_t n_next = 0; n_next < num_labels; ++n_next) {
+                auto m_cur_a = m_a[n_next];
+
+                for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
+                    scalar_t v = m_cur_a[n_cur] * beta_next_a[n_cur];
+                    beta_cur_a[n_next] += v;
+                    grad_transition_cur_batch_a[n_cur][n_next] += v * batch_grad;
+                }
+                grad_inputs_cur_frame_a[n_next] = beta_cur_a[n_next] * batch_grad;
+            }
+
+            std::swap(beta_cur, beta_next);
+        }
+    }
+
+    return {grad_transition.sum({0}, false), grad_inputs};
 }
 
 }
