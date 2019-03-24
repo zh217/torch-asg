@@ -457,7 +457,7 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
     for (int64_t b = 0; b < batch_size; ++b) {
         int64_t input_length = std::min(input_lengths[b], batch_input_len);
         int64_t target_length = std::min(target_lengths[b], batch_target_len);
-        at::Tensor beta_cur = at::empty({num_labels}, alpha.options());
+        at::Tensor beta_cur = at::zeros({num_labels}, alpha.options());
         at::Tensor beta_next = at::empty({num_labels}, alpha.options());
 
 
@@ -504,6 +504,9 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
             auto alpha_cur_frame_a = alpha_cur_batch_a[t];
             auto alpha_max_contrib_next_frame_a = alpha_max_contrib_cur_batch_a[t + 1];
             auto grad_inputs_cur_frame_a = grad_transition_cur_batch_a[t];
+
+            beta_cur.zero_();
+
             auto beta_cur_a = beta_cur.accessor<scalar_t>(1);
             auto beta_next_a = beta_next.accessor<scalar_t>(1);
 
