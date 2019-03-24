@@ -350,7 +350,7 @@ std::vector<at::Tensor> fcc_loss_cpu_template(
     at::Tensor out = at::empty({batch_size}, inputs.options());
     at::Tensor scale = at::empty({batch_size}, inputs.options());
     at::Tensor alpha = at::empty({batch_size, batch_input_len, num_labels}, inputs.options());
-    at::Tensor alpha_max_idx = at::empty({batch_size, batch_input_len}, targets.options());
+    at::Tensor alpha_max_contrib = at::empty({batch_size, batch_input_len}, targets.options());
 
     auto inputs_bf = inputs.permute({1, 0, 2}); // bf for batch-first
 
@@ -358,7 +358,7 @@ std::vector<at::Tensor> fcc_loss_cpu_template(
     auto inputs_bf_a = inputs_bf.accessor<scalar_t>(3);
     auto targets_a = targets.accessor<target_t>(2);
     auto alpha_a = alpha.accessor<scalar_t>(3);
-    auto alpha_max_idx_a = alpha_max_idx.accessor<target_t>(2);
+    auto alpha_max_contrib_a = alpha_max_contrib.accessor<target_t>(2);
 
 #pragma omp parallel for
     for (int64_t b = 0; b < batch_size; ++b) {
@@ -366,7 +366,7 @@ std::vector<at::Tensor> fcc_loss_cpu_template(
         int64_t target_length = std::min(target_lengths[b], batch_target_len);
         auto alpha_cur_batch_a = alpha_a[b];
         auto inputs_cur_batch_a = inputs_bf_a[b];
-        auto alpha_max_idx_cur_batch_a = alpha_max_idx_a[b];
+        auto alpha_max_contrib_cur_batch_a = alpha_max_contrib_a[b];
 
         for (int64_t n = 0; n < num_labels; ++n) {
             alpha_cur_batch_a[0][n] = inputs_cur_batch_a[0][n];
@@ -376,27 +376,27 @@ std::vector<at::Tensor> fcc_loss_cpu_template(
         for (int64_t t = 1; t < input_length; ++t) {
             auto alpha_prev_frame_a = alpha_cur_batch_a[t - 1];
             auto alpha_cur_frame_a = alpha_cur_batch_a[t];
-            auto alpha_max_idx_cur_frame_a = alpha_max_idx_cur_batch_a[t];
+            auto alpha_max_contrib_cur_frame_a = alpha_max_contrib_cur_batch_a[t];
             auto inputs_cur_frame_a = inputs_cur_batch_a[t];
 
-            for (int64_t n_next = 0; n_next < num_labels; ++n_next) {
+            for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
                 scalar_t sum = 0.;
                 scalar_t max = neg_inf;
 
-                for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
-                    scalar_t z = transition_a[n_next][n_cur] + alpha_prev_frame_a[n_cur];
+                for (int64_t n_prev = 0; n_prev < num_labels; ++n_prev) {
+                    scalar_t z = transition_a[n_cur][n_prev] + alpha_prev_frame_a[n_prev];
                     if (max < z) {
-                        alpha_max_idx_cur_frame_a[n_next] = n_cur;
+                        alpha_max_contrib_cur_frame_a[n_cur] = n_prev;
                         max = z;
                     }
                 }
 
-                for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
-                    scalar_t z = transition_a[n_next][n_cur] + alpha_prev_frame_a[n_cur];
+                for (int64_t n_prev = 0; n_prev < num_labels; ++n_prev) {
+                    scalar_t z = transition_a[n_cur][n_prev] + alpha_prev_frame_a[n_prev];
                     sum += std::exp(z - max);
                 }
 
-                alpha_cur_frame_a[n_next] = max + std::log(sum) + inputs_cur_frame_a[n_next];
+                alpha_cur_frame_a[n_cur] = max + std::log(sum) + inputs_cur_frame_a[n_cur];
             }
         }
 
@@ -420,7 +420,7 @@ std::vector<at::Tensor> fcc_loss_cpu_template(
         out[b] = (std::log(sum) + max) * scale[b];
     }
 
-    return {out, alpha, alpha_max_idx, scale};
+    return {out, alpha, alpha_max_contrib, scale};
 }
 
 template<typename scalar_t, at::ScalarType target_scalar_type>
@@ -432,7 +432,7 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
         IntArrayRef input_lengths, // batch_size
         IntArrayRef target_lengths, // batch_size
         const at::Tensor &alpha,
-        const at::Tensor &alpha_max_idx,
+        const at::Tensor &alpha_max_contrib,
         const at::Tensor &scale
 ) {
     constexpr scalar_t neg_inf = -std::numeric_limits<scalar_t>::infinity();
@@ -451,7 +451,7 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
     auto inputs_bf = inputs.permute({1, 0, 2}); // bf for batch-first
     auto inputs_bf_a = inputs_bf.accessor<scalar_t>(3);
     auto alpha_a = alpha.accessor<scalar_t>(3);
-    auto alpha_max_idx_a = alpha_max_idx.accessor<scalar_t>(2);
+    auto alpha_max_contrib_a = alpha_max_contrib.accessor<scalar_t>(2);
 
 #pragma omp parallel for
     for (int64_t b = 0; b < batch_size; ++b) {
@@ -465,7 +465,7 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
         auto grad_transition_cur_batch_a = grad_transition_a[b];
         auto grad_inputs_cur_batch_a = inputs_bf_a[b];
         auto alpha_cur_batch_a = alpha_a[b];
-        auto alpha_max_idx_cur_batch_a = alpha_max_idx_a[b];
+        auto alpha_max_contrib_cur_batch_a = alpha_max_contrib_a[b];
 
         // t = T - 1
         {
@@ -487,49 +487,49 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
             }
 
             for (int64_t n = 0; n < num_labels; ++n) {
-                beta_cur_a[n] = std::exp(alpha_cur_frame_a[n] - max) / sum;
-                grad_inputs_cur_frame_a[n] = beta_cur_a[n] * batch_grad;
+                scalar_t v = std::exp(alpha_cur_frame_a[n] - max) / sum;
+                beta_cur_a[n] = v;
+                grad_inputs_cur_frame_a[n] = v * batch_grad;
             }
             std::swap(beta_cur, beta_next);
         }
 
         // t = T - 2 .. 0
+
+        at::Tensor m = at::empty({num_labels, num_labels}, alpha.options());
+        // m[i][j] stores exp(score) from j@t to i@(t+1), normalized for each fixed i
+        auto m_a = m.accessor<scalar_t>(2);
+
         for (int64_t t = target_length - 2; t >= 0; --t) {
             auto alpha_cur_frame_a = alpha_cur_batch_a[t];
-            auto alpha_max_idx_next_frame_a = alpha_max_idx_cur_batch_a[t + 1];
+            auto alpha_max_contrib_next_frame_a = alpha_max_contrib_cur_batch_a[t + 1];
             auto grad_inputs_cur_frame_a = grad_transition_cur_batch_a[t];
             auto beta_cur_a = beta_cur.accessor<scalar_t>(1);
             auto beta_next_a = beta_next.accessor<scalar_t>(1);
 
-            at::Tensor m = at::empty({num_labels, num_labels}, alpha.options());
-            auto m_a = m.accessor<scalar_t>(2);
-
             for (int64_t n_next = 0; n_next < num_labels; ++n_next) {
-                scalar_t max = transition_a[n_next][alpha_max_idx_next_frame_a[n_next]] +
-                               alpha_cur_frame_a[alpha_max_idx_next_frame_a[n_next]];
+                scalar_t max = transition_a[n_next][alpha_max_contrib_next_frame_a[n_next]] +
+                               alpha_cur_frame_a[alpha_max_contrib_next_frame_a[n_next]];
                 scalar_t sum = 0.;
-                auto m_cur_a = m_a[n_next];
-                auto transition_cur_a = transition_a[n_next];
 
                 for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
-                    m_a[n_cur] = std::exp(transition_a[n_cur] + alpha_cur_frame_a[n_cur] - max);
-                    sum += m_a[n_cur];
+                    m_a[n_cur] = std::exp(transition_a[n_next][n_cur] + alpha_cur_frame_a[n_cur] - max);
+                    sum += m_a[n_next][n_cur];
                 }
 
                 for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
-                    m_cur_a[n_cur] /= sum;
+                    m_a[n_next][n_cur] /= sum;
                 }
             }
 
-            for (int64_t n_next = 0; n_next < num_labels; ++n_next) {
-                auto m_cur_a = m_a[n_next];
+            for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
 
-                for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
-                    scalar_t v = m_cur_a[n_cur] * beta_next_a[n_cur];
-                    beta_cur_a[n_next] += v;
-                    grad_transition_cur_batch_a[n_cur][n_next] += v * batch_grad;
+                for (int64_t n_next = 0; n_next < num_labels; ++n_next) {
+                    scalar_t v = m_a[n_next][n_cur] * beta_next_a[n_next];
+                    beta_cur_a[n_cur] += v;
+                    grad_transition_cur_batch_a[n_next][n_cur] += v * batch_grad;
                 }
-                grad_inputs_cur_frame_a[n_next] = beta_cur_a[n_next] * batch_grad;
+                grad_inputs_cur_frame_a[n_cur] = beta_cur_a[n_cur] * batch_grad;
             }
 
             std::swap(beta_cur, beta_next);
