@@ -29,6 +29,16 @@ namespace torch_asg {
         return log_a + std::log1p(std::exp(log_b - log_a));
     }
 
+    template<typename scalar_t>
+    inline void _d_log_sum_exp_2(scalar_t a, scalar_t b, scalar_t &grad_a, scalar_t &grad_b) {
+        scalar_t m = std::max(a, b);
+        a = std::exp(a - m);
+        b = std::exp(b - m);
+        scalar_t z = a + b;
+        grad_a = a / z;
+        grad_b = a / z;
+    }
+
     CriterionScaleFn get_scale_fn(const std::string &scale_mode) {
         if (scale_mode == "none") {
             return [](int64_t /* unused */, int64_t /* unused */, int64_t /* unused */) {
@@ -62,7 +72,6 @@ namespace torch_asg {
             const at::Tensor &targets, // batch_size * target_len
             IntArrayRef input_lengths, // batch_size
             IntArrayRef target_lengths, // batch_size
-            const std::string &reduction,
             const std::string &scale_mode
     ) {
         // constants
@@ -178,13 +187,10 @@ namespace torch_asg {
     template<typename scalar_t, at::ScalarType target_scalar_type>
     std::vector<at::Tensor> fac_loss_backward_cpu_template(
             const at::Tensor &grad_out,
-            const at::Tensor &transition, // num_labels * num_labels
             const at::Tensor &inputs, // batch_input_len * batch_size * num_labels
             const at::Tensor &targets, // batch_size * target_len
             IntArrayRef input_lengths, // batch_size
             IntArrayRef target_lengths, // batch_size
-            const std::string &reduction,
-            const std::string &scale_mode,
             const at::Tensor &alpha,
             const at::Tensor &scale,
             const at::Tensor &self_trans,
@@ -194,36 +200,108 @@ namespace torch_asg {
             int64_t batch_size,
             int64_t num_labels
     ) {
+
+        using target_t = typename std::conditional<target_scalar_type == at::kInt, int, int64_t>::type;
+
         at::Tensor beta_cur = at::empty({batch_size, batch_target_len}, alpha.options());
-        at::Tensor beta_next = at::empty({batch_size, batch_input_len}, alpha.options());
-        at::Tensor grad_transition = at::zeros_like(transition);
+        at::Tensor beta_prev = at::empty({batch_size, batch_input_len}, alpha.options());
+        at::Tensor grad_transition = at::zeros({num_labels, num_labels}, alpha.options());
         at::Tensor grad_inputs = at::zeros_like(inputs);
         at::Tensor grad_self_trans = at::zeros_like(self_trans);
         at::Tensor grad_next_trans = at::zeros_like(next_trans);
 
+        auto grad_inputs_bf = grad_inputs.permute({1, 0, 2});
+
+        auto beta_cur_a = beta_cur.accessor<scalar_t>(2);
+        auto beta_prev_a = beta_prev.accessor<scalar_t>(2);
+        auto grad_transition_a = grad_transition.accessor<scalar_t>(2);
+        auto grad_inputs_bf_a = grad_inputs_bf.accessor<scalar_t>(3);
+        auto grad_self_trans_a = grad_self_trans.accessor<scalar_t>(2);
+        auto grad_next_trans_a = grad_next_trans.accessor<scalar_t>(2);
+        auto self_trans_a = self_trans.accessor<scalar_t>(2);
+        auto next_trans_a = next_trans.accessor<scalar_t>(2);
+
+        auto inputs_bf = inputs.permute({1, 0, 2}); // bf for batch-first
+
+        auto alpha_a = alpha.accessor<scalar_t>(3);
+        auto targets_a = targets.accessor<scalar_t>(2);
+
 #pragma omp parallel for
         for (int64_t b = 0; b < batch_size; ++b) {
+            const scalar_t grad_batch = scale[b] * grad_out[b];
             int64_t input_length = std::min(input_lengths[b], batch_input_len);
             int64_t target_length = std::min(target_lengths[b], batch_target_len);
+            auto grad_input_cur_batch_a = grad_inputs_bf_a[b];
+            auto alpha_cur_batch_a = alpha_a[b];
+            auto targets_cur_batch_a = targets_a[b];
+            auto grad_self_trans_batch_a = grad_self_trans_a[b];
+            auto grad_next_trans_batch_a = grad_next_trans_a[b];
+            auto self_trans_cur_batch_a = self_trans_a[b]; // batch_target_len
+            auto next_trans_cur_batch_a = next_trans_a[b]; // batch_target_len
+
+            beta_cur_a[target_length - 1] = 1.;
 
             // beta recursion
             for (int64_t t = input_length - 1; t > 0; --t) {
+                auto grad_input_cur_frame_a = grad_input_cur_batch_a[t];
+                auto alpha_prev_frame_a = alpha_cur_batch_a[t - 1];
+
+                beta_prev.zero_();
+
                 int64_t target_frame_lower = t > input_length - target_length ? target_length - (input_length - t) : 0;
                 int64_t target_frame_upper = t < target_length ? t + 1 : target_length; // in range(1, target_length)
 
                 // parallel potential
                 for (int64_t s = target_frame_lower; s < target_frame_upper; ++s) {
+                    scalar_t cur_elem_grad = beta_cur_a[s];
 
+                    grad_input_cur_frame_a[targets_cur_batch_a[s]] += grad_batch * cur_elem_grad;
+
+                    if ((target_frame_upper < target_length || s == target_length - 1) &&
+                        s == target_frame_upper - 1 &&
+                        s > 0) {
+                        // left wedge
+                        beta_prev_a[s - 1] += beta_cur_a[s];
+                        grad_next_trans_batch_a[s] += cur_elem_grad;
+                    } else if (s == 0) {
+                        // on the top row
+                        beta_prev_a[s] += beta_cur_a[s];
+                        grad_self_trans_batch_a[s] += cur_elem_grad;
+                    } else {
+                        // general case: need to merge contribution from two paths
+                        scalar_t hori_route = alpha_prev_frame_a[s] + self_trans_cur_batch_a[s];
+                        scalar_t diag_route = alpha_prev_frame_a[s - 1] + next_trans_cur_batch_a[s];
+                        scalar_t grad_hori_route, grad_diag_route;
+                        _d_log_sum_exp_2(hori_route, diag_route, grad_hori_route, grad_diag_route);
+
+                        grad_hori_route *= cur_elem_grad;
+                        grad_diag_route *= cur_elem_grad;
+
+                        grad_self_trans_batch_a[s] += grad_hori_route;
+                        grad_next_trans_batch_a[s] += grad_diag_route;
+
+                        beta_prev_a[s] += grad_hori_route;
+                        beta_prev_a[s - 1] += grad_diag_route;
+                    }
                 }
-            }
 
-            for (int64_t s = 0; s < target_length; ++s) {
-
+                std::swap(beta_cur_a, beta_prev_a);
+                std::swap(beta_cur, beta_prev);
             }
         }
 
         for (int64_t b = 0; b < batch_size; ++b) {
+            scalar_t batch_grad = scale[b] * grad_out[b];
+            target_t prev_target = targets_a[0];
 
+            grad_transition_a[prev_target][prev_target] += grad_self_trans_a[0] * batch_grad;
+
+            for (int64_t s = 1; s < target_lengths[b]; ++s) {
+                target_t cur_target = targets_a[s];
+                grad_transition_a[cur_target][cur_target] += grad_self_trans_a[s] * batch_grad;
+                grad_transition_a[cur_target][prev_target] += grad_next_trans_a[s] * batch_grad;
+                prev_target = cur_target;
+            }
         }
 
         return {grad_transition, grad_inputs};
@@ -237,107 +315,6 @@ namespace torch_asg {
     template<typename scalar_t, at::ScalarType target_scalar_type>
     std::vector<at::Tensor> fcc_loss_backward_cpu_template() {}
 }
-//
-//std::vector<torch::Tensor>
-//fac_forward(
-//        const torch::Tensor &transition,
-//        const torch::Tensor &inputs,
-//        const torch::Tensor &targets,
-//        const torch::Tensor &input_lengths,
-//        const torch::Tensor &target_lengths,
-//        const std::string &reduction,
-//        const std::string &scale_mode
-//) {
-//// C: # chars
-//// T: input length
-//// N: batch size
-//// S: target length
-//// targets    N * S
-//// inputs     T * N * C
-//// result     N
-//// scale      N
-//// alpha      T * N * S
-//// transition C * C
-//// trans_next N * S
-//// trans_self N * S
-//    auto T = inputs.size(0);
-//    auto N = inputs.size(1);
-//    auto C = inputs.size(2);
-//    auto S = targets.size(1);
-//
-//    std::cout << "\nSizes: T " << T << ", N " << N << ", C " << C << ", S " << S << '\n';
-//    auto alpha = torch::empty({T, N, S}, torch::TensorOptions().requires_grad(false));
-//    alpha.fill_(-std::numeric_limits<float>::infinity());
-//
-//    auto result = torch::empty({N}, torch::TensorOptions().requires_grad(false));
-//
-//    // alpha[0, n, _] <- -inf
-//    // alpha[0, n, 0] <- inputs[0, n, targets[n, 0]]
-//    for (int n = 0; n != N; ++n) {
-//        alpha[0][n][0] = 0;
-//    }
-//
-//    auto trans_next = torch::zeros({N, S}, torch::TensorOptions().requires_grad(false));
-//    auto trans_self = torch::zeros({N, S}, torch::TensorOptions().requires_grad(false));
-//
-//    for (int n = 0; n != N; ++n) {
-//        auto prev_target = targets[0][0];
-//        for (int s = 0; s != S; ++s) {
-//            auto target = targets[n][s];
-//            trans_self[n][s] = transition[target][target];
-//            if (s > 0) {
-//                trans_next[n][s] = transition[prev_target][target];
-//            }
-//            prev_target = target;
-//        }
-//    }
-//
-////    s1 <- trans_self[n, s] + alpha[t - 1, n, s]
-////    s2 <- trans_next[n, s] + alpha[t - 1, n, s - 1]
-////    alpha[t, n, s] <- inputs[t, n, targets[n, s]] + logadd(s1, s2)
-//
-//    for (int t = 1; t < T; ++t) {
-//        for (int n = 0; n != N; ++n) {
-//            for (int s = 0; s != S; ++s) {
-//                auto s1 = trans_self[n][s] + alpha[t - 1][n][s];
-//                std::cout << t << ' ' << n << ' ' << s << ' ' << s1.data<float>()[0] << ' ';
-//                if (s > 0) {
-//                    auto s2 = trans_next[n][s] + alpha[t - 1][n][s - 1];
-//                    std::cout << s2.data<float>()[0] << ' ';
-//                    s1 = torch::logsumexp(torch::stack({s1, s2}), 0);
-//                    std::cout << s1.data<float>()[0] << ' ';
-//                }
-//                alpha[t][n][s] = inputs[t][n][targets[n][s]] + s1;
-//                std::cout << alpha[t][n][s].data<float>()[0] << '\n';
-//            }
-//        }
-//    }
-//
-//    for (int n = 0; n != N; ++n) {
-//        result[n] = alpha[input_lengths[n] - 1][n][target_lengths[n] - 1];
-//    }
-//
-//    return {alpha, trans_next, trans_self, result};
-//}
-//
-//
-//std::vector<torch::Tensor> fac_backward(
-//        const torch::Tensor &alpha
-//) {
-//    auto beta = torch::empty_like(alpha);
-//    beta.fill_(-std::numeric_limits<float>::infinity());
-//    return {beta};
-//}
-//
-//
-//void fcc_forward() {
-//
-//}
-//
-//void fcc_backward() {
-//
-//}
-//
 //#ifdef TORCH_EXTENSION_NAME
 //PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
 //    m.def("fac_forward", &fac_forward, "FAC forward");
