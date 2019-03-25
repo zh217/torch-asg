@@ -252,7 +252,7 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
     auto inputs_bf = inputs.permute({1, 0, 2}); // bf for batch-first
 
     auto alpha_a = alpha.accessor<scalar_t, 3>();
-    auto targets_a = targets.accessor<scalar_t, 2>();
+    auto targets_a = targets.accessor<target_t, 2>();
 
 #pragma omp parallel for
     for (int64_t b = 0; b < batch_size; ++b) {
@@ -414,7 +414,7 @@ std::vector<at::Tensor> fcc_loss_cpu_template(
     at::Tensor out = at::empty({batch_size}, inputs.options());
     at::Tensor scale = at::empty({batch_size}, inputs.options());
     at::Tensor alpha = at::empty({batch_size, batch_input_len, num_labels}, inputs.options());
-    at::Tensor alpha_max_contrib = at::empty({batch_size, batch_input_len}, targets.options());
+    at::Tensor alpha_max_contrib = at::empty({batch_size, batch_input_len, num_labels}, targets.options());
 
     auto inputs_bf = inputs.permute({1, 0, 2}); // bf for batch-first
 
@@ -524,7 +524,7 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
         const at::Tensor &scale
 ) {
     constexpr scalar_t neg_inf = -std::numeric_limits<scalar_t>::infinity();
-//    using target_t = typename std::conditional<target_scalar_type == at::kInt, int, int64_t>::type;
+    using target_t = typename std::conditional<target_scalar_type == at::kInt, int, int64_t>::type;
 
     int64_t batch_input_len = inputs.size(0);
     int64_t batch_target_len = targets.size(1);
@@ -541,7 +541,7 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
     auto grad_inputs_bf = grad_inputs.permute({1, 0, 2}); // bf for batch-first
     auto grad_inputs_bf_a = grad_inputs_bf.accessor<scalar_t, 3>();
     auto alpha_a = alpha.accessor<scalar_t, 3>();
-    auto alpha_max_contrib_a = alpha_max_contrib.accessor<scalar_t, 3>();
+    auto alpha_max_contrib_a = alpha_max_contrib.accessor<target_t, 3>();
 
 #pragma omp parallel for
     for (int64_t b = 0; b < batch_size; ++b) {
