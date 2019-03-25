@@ -1,6 +1,7 @@
-//#include <torch/torch.h>
-#include <ATen/ATen.h>
-#include <ATen/Dispatch.h>
+#include <omp.h>
+#include <torch/extension.h>
+//#include <ATen/ATen.h>
+//#include <ATen/Dispatch.h>
 #include <ATen/TensorUtils.h>
 
 #include <numeric>
@@ -419,7 +420,7 @@ std::vector<at::Tensor> fcc_loss_cpu_template(
 
     auto transition_a = transition.accessor<scalar_t, 2>();
     auto inputs_bf_a = inputs_bf.accessor<scalar_t, 3>();
-    auto targets_a = targets.accessor<target_t, 2>();
+//    auto targets_a = targets.accessor<target_t, 2>();
     auto alpha_a = alpha.accessor<scalar_t, 3>();
     auto alpha_max_contrib_a = alpha_max_contrib.accessor<target_t, 3>();
 
@@ -537,8 +538,8 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
     auto grad_out_a = grad_out.accessor<scalar_t, 1>();
     auto transition_a = transition.accessor<scalar_t, 2>();
     auto grad_transition_a = grad_transition.accessor<scalar_t, 3>();
-    auto inputs_bf = inputs.permute({1, 0, 2}); // bf for batch-first
-    auto inputs_bf_a = inputs_bf.accessor<scalar_t, 3>();
+//    auto inputs_bf = inputs.permute({1, 0, 2}); // bf for batch-first
+//    auto inputs_bf_a = inputs_bf.accessor<scalar_t, 3>();
     auto alpha_a = alpha.accessor<scalar_t, 3>();
     auto alpha_max_contrib_a = alpha_max_contrib.accessor<scalar_t, 3>();
 
@@ -552,7 +553,7 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
 
         const scalar_t batch_grad = scale_a[b] * grad_out_a[b];
         auto grad_transition_cur_batch_a = grad_transition_a[b];
-        auto grad_inputs_cur_batch_a = inputs_bf_a[b];
+//        auto grad_inputs_cur_batch_a = inputs_bf_a[b];
         auto alpha_cur_batch_a = alpha_a[b];
         auto alpha_max_contrib_cur_batch_a = alpha_max_contrib_a[b];
 
@@ -658,10 +659,13 @@ std::vector<at::Tensor> fcc_loss_backward_cpu(
         }
     });
 }
+
 }
 #ifdef TORCH_EXTENSION_NAME
 PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("fac_forward_cpu", &torch_asg::fac_forward_cpu, "FAC forward");
-    m.def("fac_backward_cpu", &torch_asg::fac_backward_cpu, "FAC backward");
+    m.def("fac_loss_cpu", &torch_asg::fac_loss_cpu, "FAC forward");
+    m.def("fac_loss_backward_cpu", &torch_asg::fac_loss_backward_cpu, "FAC backward");
+    m.def("fcc_loss_cpu", &torch_asg::fcc_loss_cpu, "FAC forward");
+    m.def("fcc_loss_backward_cpu", &torch_asg::fcc_loss_backward_cpu, "FAC backward");
 }
 #endif
