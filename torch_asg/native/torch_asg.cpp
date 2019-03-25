@@ -538,8 +538,8 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
     auto grad_out_a = grad_out.accessor<scalar_t, 1>();
     auto transition_a = transition.accessor<scalar_t, 2>();
     auto grad_transition_a = grad_transition.accessor<scalar_t, 3>();
-//    auto inputs_bf = inputs.permute({1, 0, 2}); // bf for batch-first
-//    auto inputs_bf_a = inputs_bf.accessor<scalar_t, 3>();
+    auto grad_inputs_bf = grad_inputs.permute({1, 0, 2}); // bf for batch-first
+    auto grad_inputs_bf_a = grad_inputs_bf.accessor<scalar_t, 3>();
     auto alpha_a = alpha.accessor<scalar_t, 3>();
     auto alpha_max_contrib_a = alpha_max_contrib.accessor<scalar_t, 3>();
 
@@ -553,14 +553,14 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
 
         const scalar_t batch_grad = scale_a[b] * grad_out_a[b];
         auto grad_transition_cur_batch_a = grad_transition_a[b];
-//        auto grad_inputs_cur_batch_a = inputs_bf_a[b];
+        auto grad_inputs_cur_batch_a = grad_inputs_bf_a[b];
         auto alpha_cur_batch_a = alpha_a[b];
         auto alpha_max_contrib_cur_batch_a = alpha_max_contrib_a[b];
 
         // t = T - 1
         {
             auto alpha_cur_frame_a = alpha_cur_batch_a[input_length - 1];
-            auto grad_inputs_cur_frame_a = grad_transition_cur_batch_a[input_length - 1];
+            auto grad_inputs_cur_frame_a = grad_inputs_cur_batch_a[input_length - 1];
             auto beta_cur_a = beta_cur.accessor<scalar_t, 1>();
 
             scalar_t max = neg_inf;
