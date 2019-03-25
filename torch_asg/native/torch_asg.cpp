@@ -546,7 +546,7 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
 #pragma omp parallel for
     for (int64_t b = 0; b < batch_size; ++b) {
         int64_t input_length = std::min(input_lengths[b], batch_input_len);
-        int64_t target_length = std::min(target_lengths[b], batch_target_len);
+//        int64_t target_length = std::min(target_lengths[b], batch_target_len);
         at::Tensor beta_cur = at::zeros({num_labels}, alpha.options());
         at::Tensor beta_next = at::empty({num_labels}, alpha.options());
 
@@ -590,7 +590,7 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
         // m[i][j] stores exp(score) from j@t to i@(t+1), normalized for each fixed i
         auto m_a = m.accessor<scalar_t, 2>();
 
-        for (int64_t t = target_length - 2; t >= 0; --t) {
+        for (int64_t t = input_length - 2; t >= 0; --t) {
             auto alpha_cur_frame_a = alpha_cur_batch_a[t];
             auto alpha_max_contrib_next_frame_a = alpha_max_contrib_cur_batch_a[t + 1];
             auto grad_inputs_cur_frame_a = grad_transition_cur_batch_a[t];
@@ -601,8 +601,8 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
             auto beta_next_a = beta_next.accessor<scalar_t, 1>();
 
             for (int64_t n_next = 0; n_next < num_labels; ++n_next) {
-                scalar_t max = transition_a[n_next][alpha_max_contrib_next_frame_a[n_next]] +
-                               alpha_cur_frame_a[alpha_max_contrib_next_frame_a[n_next]];
+                target_t max_label = alpha_max_contrib_next_frame_a[n_next];
+                scalar_t max = transition_a[n_next][max_label] + alpha_cur_frame_a[max_label];
                 scalar_t sum = 0.;
 
                 for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
@@ -617,7 +617,6 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
             }
 
             for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
-
                 for (int64_t n_next = 0; n_next < num_labels; ++n_next) {
                     scalar_t v = m_a[n_next][n_cur] * beta_next_a[n_next];
                     beta_cur_a[n_cur] += v;
