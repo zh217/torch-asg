@@ -111,12 +111,12 @@ std::vector<at::Tensor> fac_loss_cpu_template(
 
     auto inputs_bf = inputs.permute({1, 0, 2}); // bf for batch-first
 
-    auto transition_a = transition.accessor<scalar_t>(2);
-    auto inputs_bf_a = inputs_bf.accessor<scalar_t>(3);
-    auto targets_a = targets.accessor<target_t>(2);
-    auto alpha_a = alpha.accessor<scalar_t>(3);
-    auto self_trans_a = self_trans.accessor<scalar_t>(2);
-    auto next_trans_a = next_trans.accessor<scalar_t>(2);
+    auto transition_a = transition.accessor<scalar_t, 2>();
+    auto inputs_bf_a = inputs_bf.accessor<scalar_t, 3>();
+    auto targets_a = targets.accessor<target_t, 2>();
+    auto alpha_a = alpha.accessor<scalar_t, 3>();
+    auto self_trans_a = self_trans.accessor<scalar_t, 2>();
+    auto next_trans_a = next_trans.accessor<scalar_t, 2>();
 
 #pragma omp parallel for
     for (int64_t b = 0; b < batch_size; ++b) {
@@ -153,7 +153,7 @@ std::vector<at::Tensor> fac_loss_cpu_template(
 
             if (t <= input_length - target_length) {
                 // still at the top row
-                alpha_cur_batch_a[0] =
+                alpha_cur_frame_a[0] =
                         self_trans_cur_batch_a[0] +
                         alpha_prev_frame_a[0] +
                         inputs_cur_frame_a[targets_cur_batch_a[0]];
@@ -183,6 +183,24 @@ std::vector<at::Tensor> fac_loss_cpu_template(
     return {out, alpha, scale, self_trans, next_trans};
 }
 
+std::vector<at::Tensor> fac_loss_cpu(
+        const at::Tensor &transition,
+        const at::Tensor &inputs,
+        const at::Tensor &targets,
+        IntArrayRef input_lengths,
+        IntArrayRef target_lengths,
+        const std::string &scale_mode
+) {
+    return AT_DISPATCH_FLOATING_TYPES(inputs.type(), "fac_loss_cpu", [&] {
+        if (targets.scalar_type() == at::kLong) {
+            return fac_loss_cpu_template<scalar_t, at::kLong>(transition, inputs, targets, input_lengths,
+                                                              target_lengths, scale_mode);
+        } else {
+            return fac_loss_cpu_template<scalar_t, at::kInt>(transition, inputs, targets, input_lengths,
+                                                             target_lengths, scale_mode);
+        }
+    });
+}
 
 template<typename scalar_t, at::ScalarType target_scalar_type>
 std::vector<at::Tensor> fac_loss_backward_cpu_template(
@@ -211,24 +229,26 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
 
     auto grad_inputs_bf = grad_inputs.permute({1, 0, 2});
 
-    auto grad_transition_a = grad_transition.accessor<scalar_t>(2);
-    auto grad_inputs_bf_a = grad_inputs_bf.accessor<scalar_t>(3);
-    auto grad_self_trans_a = grad_self_trans.accessor<scalar_t>(2);
-    auto grad_next_trans_a = grad_next_trans.accessor<scalar_t>(2);
-    auto self_trans_a = self_trans.accessor<scalar_t>(2);
-    auto next_trans_a = next_trans.accessor<scalar_t>(2);
+    auto scale_a = scale.accessor<scalar_t, 1>();
+    auto grad_out_a = grad_out.accessor<scalar_t, 1>();
+    auto grad_transition_a = grad_transition.accessor<scalar_t, 2>();
+    auto grad_inputs_bf_a = grad_inputs_bf.accessor<scalar_t, 3>();
+    auto grad_self_trans_a = grad_self_trans.accessor<scalar_t, 2>();
+    auto grad_next_trans_a = grad_next_trans.accessor<scalar_t, 2>();
+    auto self_trans_a = self_trans.accessor<scalar_t, 2>();
+    auto next_trans_a = next_trans.accessor<scalar_t, 2>();
 
     auto inputs_bf = inputs.permute({1, 0, 2}); // bf for batch-first
 
-    auto alpha_a = alpha.accessor<scalar_t>(3);
-    auto targets_a = targets.accessor<scalar_t>(2);
+    auto alpha_a = alpha.accessor<scalar_t, 3>();
+    auto targets_a = targets.accessor<scalar_t, 2>();
 
 #pragma omp parallel for
     for (int64_t b = 0; b < batch_size; ++b) {
         at::Tensor beta_cur = at::empty({batch_target_len}, alpha.options());
         at::Tensor beta_prev = at::empty({batch_input_len}, alpha.options());
 
-        const scalar_t grad_batch = scale[b] * grad_out[b];
+        const scalar_t grad_batch = scale_a[b] * grad_out_a[b];
         int64_t input_length = std::min(input_lengths[b], batch_input_len);
         int64_t target_length = std::min(target_lengths[b], batch_target_len);
         auto grad_input_cur_batch_a = grad_inputs_bf_a[b];
@@ -243,8 +263,8 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
 
         // beta recursion
         for (int64_t t = input_length - 1; t > 0; --t) {
-            auto beta_cur_a = beta_cur.accessor<scalar_t>(1);
-            auto beta_prev_a = beta_prev.accessor<scalar_t>(1);
+            auto beta_cur_a = beta_cur.accessor<scalar_t, 1>();
+            auto beta_prev_a = beta_prev.accessor<scalar_t, 1>();
 
             auto grad_input_cur_frame_a = grad_input_cur_batch_a[t];
             auto alpha_prev_frame_a = alpha_cur_batch_a[t - 1];
@@ -293,20 +313,48 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
     }
 
     for (int64_t b = 0; b < batch_size; ++b) {
-        scalar_t batch_grad = scale[b] * grad_out[b];
-        target_t prev_target = targets_a[0];
+        auto grad_self_trans_cur_batch_a = grad_self_trans_a[b];
+        auto grad_next_trans_cur_batch_a = grad_next_trans_a[b];
+        auto targets_batch_a = targets_a[b];
 
-        grad_transition_a[prev_target][prev_target] += grad_self_trans_a[0] * batch_grad;
+        scalar_t batch_grad = scale_a[b] * grad_out_a[b];
+        target_t prev_target = targets_batch_a[0];
+
+        grad_transition_a[prev_target][prev_target] += grad_self_trans_cur_batch_a[0] * batch_grad;
 
         for (int64_t s = 1; s < target_lengths[b]; ++s) {
-            target_t cur_target = targets_a[s];
-            grad_transition_a[cur_target][cur_target] += grad_self_trans_a[s] * batch_grad;
-            grad_transition_a[cur_target][prev_target] += grad_next_trans_a[s] * batch_grad;
+            auto cur_target = targets_batch_a[s];
+            grad_transition_a[cur_target][cur_target] += grad_self_trans_cur_batch_a[s] * batch_grad;
+            grad_transition_a[cur_target][prev_target] += grad_next_trans_cur_batch_a[s] * batch_grad;
             prev_target = cur_target;
         }
     }
 
     return {grad_transition, grad_inputs};
+}
+
+std::vector<at::Tensor> fac_loss_backward_cpu(
+        const at::Tensor &grad_out,
+        const at::Tensor &inputs, // batch_input_len * batch_size * num_labels
+        const at::Tensor &targets, // batch_size * target_len
+        IntArrayRef input_lengths, // batch_size
+        IntArrayRef target_lengths, // batch_size
+        const at::Tensor &alpha,
+        const at::Tensor &scale,
+        const at::Tensor &self_trans,
+        const at::Tensor &next_trans
+) {
+    return AT_DISPATCH_FLOATING_TYPES(inputs.type(), "fac_loss_backward_cpu", [&] {
+        if (targets.scalar_type() == at::kLong) {
+            return fac_loss_backward_cpu_template<scalar_t, at::kLong>(grad_out, inputs, targets, input_lengths,
+                                                                       target_lengths, alpha, scale, self_trans,
+                                                                       next_trans);
+        } else {
+            return fac_loss_backward_cpu_template<scalar_t, at::kInt>(grad_out, inputs, targets, input_lengths,
+                                                                      target_lengths, alpha, scale, self_trans,
+                                                                      next_trans);
+        }
+    });
 }
 
 
@@ -354,11 +402,11 @@ std::vector<at::Tensor> fcc_loss_cpu_template(
 
     auto inputs_bf = inputs.permute({1, 0, 2}); // bf for batch-first
 
-    auto transition_a = transition.accessor<scalar_t>(2);
-    auto inputs_bf_a = inputs_bf.accessor<scalar_t>(3);
-    auto targets_a = targets.accessor<target_t>(2);
-    auto alpha_a = alpha.accessor<scalar_t>(3);
-    auto alpha_max_contrib_a = alpha_max_contrib.accessor<target_t>(2);
+    auto transition_a = transition.accessor<scalar_t, 2>();
+    auto inputs_bf_a = inputs_bf.accessor<scalar_t, 3>();
+    auto targets_a = targets.accessor<target_t, 2>();
+    auto alpha_a = alpha.accessor<scalar_t, 3>();
+    auto alpha_max_contrib_a = alpha_max_contrib.accessor<target_t, 3>();
 
 #pragma omp parallel for
     for (int64_t b = 0; b < batch_size; ++b) {
@@ -423,6 +471,24 @@ std::vector<at::Tensor> fcc_loss_cpu_template(
     return {out, alpha, alpha_max_contrib, scale};
 }
 
+std::vector<at::Tensor> fcc_loss_cpu(
+        const at::Tensor &transition,
+        const at::Tensor &inputs,
+        const at::Tensor &targets,
+        IntArrayRef input_lengths,
+        IntArrayRef target_lengths,
+        const std::string &scale_mode) {
+    return AT_DISPATCH_FLOATING_TYPES(inputs.type(), "fcc_loss_cpu", [&] {
+        if (targets.scalar_type() == at::kLong) {
+            return fcc_loss_cpu_template<scalar_t, at::kLong>(transition, inputs, targets, input_lengths,
+                                                              target_lengths, scale_mode);
+        } else {
+            return fcc_loss_cpu_template<scalar_t, at::kInt>(transition, inputs, targets, input_lengths,
+                                                             target_lengths, scale_mode);
+        }
+    });
+}
+
 template<typename scalar_t, at::ScalarType target_scalar_type>
 std::vector<at::Tensor> fcc_loss_backward_cpu_template(
         const at::Tensor &grad_out,
@@ -446,12 +512,14 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
     at::Tensor grad_transition = at::zeros({batch_size, num_labels, num_labels}, alpha.options());
     at::Tensor grad_inputs = at::zeros_like(inputs);
 
-    auto transition_a = transition.accessor<scalar_t>(2);
-    auto grad_transition_a = grad_transition.accessor<scalar_t>(3);
+    auto scale_a = scale.accessor<scalar_t, 1>();
+    auto grad_out_a = grad_out.accessor<scalar_t, 1>();
+    auto transition_a = transition.accessor<scalar_t, 2>();
+    auto grad_transition_a = grad_transition.accessor<scalar_t, 3>();
     auto inputs_bf = inputs.permute({1, 0, 2}); // bf for batch-first
-    auto inputs_bf_a = inputs_bf.accessor<scalar_t>(3);
-    auto alpha_a = alpha.accessor<scalar_t>(3);
-    auto alpha_max_contrib_a = alpha_max_contrib.accessor<scalar_t>(2);
+    auto inputs_bf_a = inputs_bf.accessor<scalar_t, 3>();
+    auto alpha_a = alpha.accessor<scalar_t, 3>();
+    auto alpha_max_contrib_a = alpha_max_contrib.accessor<scalar_t, 3>();
 
 #pragma omp parallel for
     for (int64_t b = 0; b < batch_size; ++b) {
@@ -461,7 +529,7 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
         at::Tensor beta_next = at::empty({num_labels}, alpha.options());
 
 
-        const scalar_t batch_grad = scale[b] * grad_out[b];
+        const scalar_t batch_grad = scale_a[b] * grad_out_a[b];
         auto grad_transition_cur_batch_a = grad_transition_a[b];
         auto grad_inputs_cur_batch_a = inputs_bf_a[b];
         auto alpha_cur_batch_a = alpha_a[b];
@@ -471,7 +539,7 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
         {
             auto alpha_cur_frame_a = alpha_cur_batch_a[input_length - 1];
             auto grad_inputs_cur_frame_a = grad_transition_cur_batch_a[input_length - 1];
-            auto beta_cur_a = beta_cur.accessor<scalar_t>(1);
+            auto beta_cur_a = beta_cur.accessor<scalar_t, 1>();
 
             scalar_t max = neg_inf;
             scalar_t sum = 0.;
@@ -498,7 +566,7 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
 
         at::Tensor m = at::empty({num_labels, num_labels}, alpha.options());
         // m[i][j] stores exp(score) from j@t to i@(t+1), normalized for each fixed i
-        auto m_a = m.accessor<scalar_t>(2);
+        auto m_a = m.accessor<scalar_t, 2>();
 
         for (int64_t t = target_length - 2; t >= 0; --t) {
             auto alpha_cur_frame_a = alpha_cur_batch_a[t];
@@ -507,8 +575,8 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
 
             beta_cur.zero_();
 
-            auto beta_cur_a = beta_cur.accessor<scalar_t>(1);
-            auto beta_next_a = beta_next.accessor<scalar_t>(1);
+            auto beta_cur_a = beta_cur.accessor<scalar_t, 1>();
+            auto beta_next_a = beta_next.accessor<scalar_t, 1>();
 
             for (int64_t n_next = 0; n_next < num_labels; ++n_next) {
                 scalar_t max = transition_a[n_next][alpha_max_contrib_next_frame_a[n_next]] +
@@ -516,8 +584,9 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
                 scalar_t sum = 0.;
 
                 for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
-                    m_a[n_cur] = std::exp(transition_a[n_next][n_cur] + alpha_cur_frame_a[n_cur] - max);
-                    sum += m_a[n_next][n_cur];
+                    scalar_t v = std::exp(transition_a[n_next][n_cur] + alpha_cur_frame_a[n_cur] - max);
+                    m_a[n_next][n_cur] = v;
+                    sum += v;
                 }
 
                 for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
@@ -542,6 +611,28 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
     return {grad_transition.sum({0}, false), grad_inputs};
 }
 
+std::vector<at::Tensor> fcc_loss_backward_cpu_template(
+        const at::Tensor &grad_out,
+        const at::Tensor &transition,
+        const at::Tensor &inputs, // batch_input_len * batch_size * num_labels
+        const at::Tensor &targets, // batch_size * target_len
+        IntArrayRef input_lengths, // batch_size
+        IntArrayRef target_lengths, // batch_size
+        const at::Tensor &alpha,
+        const at::Tensor &alpha_max_contrib,
+        const at::Tensor &scale) {
+    return AT_DISPATCH_FLOATING_TYPES(inputs.type(), "fcc_loss_backward_cpu", [&] {
+        if (targets.scalar_type() == at::kLong) {
+            return fcc_loss_backward_cpu_template<scalar_t, at::kLong>(grad_out, transition, inputs, targets,
+                                                                       input_lengths, target_lengths, alpha,
+                                                                       alpha_max_contrib, scale);
+        } else {
+            return fcc_loss_backward_cpu_template<scalar_t, at::kInt>(grad_out, transition, inputs, targets,
+                                                                      input_lengths, target_lengths, alpha,
+                                                                      alpha_max_contrib, scale);
+        }
+    });
+}
 }
 //#ifdef TORCH_EXTENSION_NAME
 //PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
