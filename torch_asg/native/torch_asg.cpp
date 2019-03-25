@@ -611,7 +611,7 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
     return {grad_transition.sum({0}, false), grad_inputs};
 }
 
-std::vector<at::Tensor> fcc_loss_backward_cpu_template(
+std::vector<at::Tensor> fcc_loss_backward_cpu(
         const at::Tensor &grad_out,
         const at::Tensor &transition,
         const at::Tensor &inputs, // batch_input_len * batch_size * num_labels
