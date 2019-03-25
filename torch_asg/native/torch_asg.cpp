@@ -17,6 +17,10 @@ using IntArrayRef = at::ArrayRef<int64_t>;
 using CriterionScaleFn = std::function<float(int64_t /* alphabet size */, int64_t /* timeframes */,
                                              int64_t /* labelsize */)>;
 
+IntArrayRef _convert_to_array_ref(const at::Tensor &t) {
+    return IntArrayRef{t.data<int64_t>(), static_cast<size_t>(t.numel())};
+}
+
 template<typename scalar_t>
 inline scalar_t _log_sum_exp(scalar_t log_a, scalar_t log_b) {
     constexpr scalar_t neg_inf = -std::numeric_limits<scalar_t>::infinity();
@@ -76,7 +80,7 @@ std::vector<at::Tensor> fac_loss_cpu_template(
         const std::string &scale_mode
 ) {
     // constants
-    constexpr scalar_t neg_inf = -std::numeric_limits<scalar_t>::infinity();
+//    constexpr scalar_t neg_inf = -std::numeric_limits<scalar_t>::infinity();
     using target_t = typename std::conditional<target_scalar_type == at::kInt, int, int64_t>::type;
 
     // sanity check
@@ -187,17 +191,23 @@ std::vector<at::Tensor> fac_loss_cpu(
         const at::Tensor &transition,
         const at::Tensor &inputs,
         const at::Tensor &targets,
-        IntArrayRef input_lengths,
-        IntArrayRef target_lengths,
+        const at::Tensor &input_lengths, // batch_size
+        const at::Tensor &target_lengths, // batch_size
         const std::string &scale_mode
 ) {
+    at::Tensor input_lengths_ = input_lengths.toType(at::kLong).toBackend(at::Backend::CPU).contiguous();
+    at::Tensor target_lengths_ = target_lengths.toType(at::kLong).toBackend(at::Backend::CPU).contiguous();
     return AT_DISPATCH_FLOATING_TYPES(inputs.type(), "fac_loss_cpu", [&] {
         if (targets.scalar_type() == at::kLong) {
-            return fac_loss_cpu_template<scalar_t, at::kLong>(transition, inputs, targets, input_lengths,
-                                                              target_lengths, scale_mode);
+            return fac_loss_cpu_template<scalar_t, at::kLong>(transition, inputs, targets,
+                                                              _convert_to_array_ref(input_lengths_),
+                                                              _convert_to_array_ref(target_lengths_),
+                                                              scale_mode);
         } else {
-            return fac_loss_cpu_template<scalar_t, at::kInt>(transition, inputs, targets, input_lengths,
-                                                             target_lengths, scale_mode);
+            return fac_loss_cpu_template<scalar_t, at::kInt>(transition, inputs, targets,
+                                                             _convert_to_array_ref(input_lengths_),
+                                                             _convert_to_array_ref(target_lengths_),
+                                                             scale_mode);
         }
     });
 }
@@ -337,21 +347,26 @@ std::vector<at::Tensor> fac_loss_backward_cpu(
         const at::Tensor &grad_out,
         const at::Tensor &inputs, // batch_input_len * batch_size * num_labels
         const at::Tensor &targets, // batch_size * target_len
-        IntArrayRef input_lengths, // batch_size
-        IntArrayRef target_lengths, // batch_size
+        const at::Tensor &input_lengths, // batch_size
+        const at::Tensor &target_lengths, // batch_size
         const at::Tensor &alpha,
         const at::Tensor &scale,
         const at::Tensor &self_trans,
         const at::Tensor &next_trans
 ) {
+    at::Tensor input_lengths_ = input_lengths.toType(at::kLong).toBackend(at::Backend::CPU).contiguous();
+    at::Tensor target_lengths_ = target_lengths.toType(at::kLong).toBackend(at::Backend::CPU).contiguous();
     return AT_DISPATCH_FLOATING_TYPES(inputs.type(), "fac_loss_backward_cpu", [&] {
         if (targets.scalar_type() == at::kLong) {
-            return fac_loss_backward_cpu_template<scalar_t, at::kLong>(grad_out, inputs, targets, input_lengths,
-                                                                       target_lengths, alpha, scale, self_trans,
-                                                                       next_trans);
+            return fac_loss_backward_cpu_template<scalar_t, at::kLong>(grad_out, inputs, targets,
+                                                                       _convert_to_array_ref(input_lengths_),
+                                                                       _convert_to_array_ref(target_lengths_),
+                                                                       alpha, scale, self_trans, next_trans);
         } else {
-            return fac_loss_backward_cpu_template<scalar_t, at::kInt>(grad_out, inputs, targets, input_lengths,
-                                                                      target_lengths, alpha, scale, self_trans,
+            return fac_loss_backward_cpu_template<scalar_t, at::kInt>(grad_out, inputs, targets,
+                                                                      _convert_to_array_ref(input_lengths_),
+                                                                      _convert_to_array_ref(target_lengths_),
+                                                                      alpha, scale, self_trans,
                                                                       next_trans);
         }
     });
@@ -475,16 +490,22 @@ std::vector<at::Tensor> fcc_loss_cpu(
         const at::Tensor &transition,
         const at::Tensor &inputs,
         const at::Tensor &targets,
-        IntArrayRef input_lengths,
-        IntArrayRef target_lengths,
+        const at::Tensor &input_lengths, // batch_size
+        const at::Tensor &target_lengths, // batch_size
         const std::string &scale_mode) {
+    at::Tensor input_lengths_ = input_lengths.toType(at::kLong).toBackend(at::Backend::CPU).contiguous();
+    at::Tensor target_lengths_ = target_lengths.toType(at::kLong).toBackend(at::Backend::CPU).contiguous();
     return AT_DISPATCH_FLOATING_TYPES(inputs.type(), "fcc_loss_cpu", [&] {
         if (targets.scalar_type() == at::kLong) {
-            return fcc_loss_cpu_template<scalar_t, at::kLong>(transition, inputs, targets, input_lengths,
-                                                              target_lengths, scale_mode);
+            return fcc_loss_cpu_template<scalar_t, at::kLong>(transition, inputs, targets,
+                                                              _convert_to_array_ref(input_lengths_),
+                                                              _convert_to_array_ref(target_lengths_),
+                                                              scale_mode);
         } else {
-            return fcc_loss_cpu_template<scalar_t, at::kInt>(transition, inputs, targets, input_lengths,
-                                                             target_lengths, scale_mode);
+            return fcc_loss_cpu_template<scalar_t, at::kInt>(transition, inputs, targets,
+                                                             _convert_to_array_ref(input_lengths_),
+                                                             _convert_to_array_ref(target_lengths_),
+                                                             scale_mode);
         }
     });
 }
@@ -502,7 +523,7 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
         const at::Tensor &scale
 ) {
     constexpr scalar_t neg_inf = -std::numeric_limits<scalar_t>::infinity();
-    using target_t = typename std::conditional<target_scalar_type == at::kInt, int, int64_t>::type;
+//    using target_t = typename std::conditional<target_scalar_type == at::kInt, int, int64_t>::type;
 
     int64_t batch_input_len = inputs.size(0);
     int64_t batch_target_len = targets.size(1);
@@ -616,27 +637,31 @@ std::vector<at::Tensor> fcc_loss_backward_cpu(
         const at::Tensor &transition,
         const at::Tensor &inputs, // batch_input_len * batch_size * num_labels
         const at::Tensor &targets, // batch_size * target_len
-        IntArrayRef input_lengths, // batch_size
-        IntArrayRef target_lengths, // batch_size
+        const at::Tensor &input_lengths, // batch_size
+        const at::Tensor &target_lengths, // batch_size
         const at::Tensor &alpha,
         const at::Tensor &alpha_max_contrib,
         const at::Tensor &scale) {
+    at::Tensor input_lengths_ = input_lengths.toType(at::kLong).toBackend(at::Backend::CPU).contiguous();
+    at::Tensor target_lengths_ = target_lengths.toType(at::kLong).toBackend(at::Backend::CPU).contiguous();
     return AT_DISPATCH_FLOATING_TYPES(inputs.type(), "fcc_loss_backward_cpu", [&] {
         if (targets.scalar_type() == at::kLong) {
             return fcc_loss_backward_cpu_template<scalar_t, at::kLong>(grad_out, transition, inputs, targets,
-                                                                       input_lengths, target_lengths, alpha,
-                                                                       alpha_max_contrib, scale);
+                                                                       _convert_to_array_ref(input_lengths_),
+                                                                       _convert_to_array_ref(target_lengths_),
+                                                                       alpha, alpha_max_contrib, scale);
         } else {
             return fcc_loss_backward_cpu_template<scalar_t, at::kInt>(grad_out, transition, inputs, targets,
-                                                                      input_lengths, target_lengths, alpha,
-                                                                      alpha_max_contrib, scale);
+                                                                      _convert_to_array_ref(input_lengths_),
+                                                                      _convert_to_array_ref(target_lengths_),
+                                                                      alpha, alpha_max_contrib, scale);
         }
     });
 }
 }
-//#ifdef TORCH_EXTENSION_NAME
-//PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-//    m.def("fac_forward", &fac_forward, "FAC forward");
-//    m.def("fac_backward", &fac_backward, "FAC backward");
-//}
-//#endif
+#ifdef TORCH_EXTENSION_NAME
+PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
+    m.def("fac_forward_cpu", &torch_asg::fac_forward_cpu, "FAC forward");
+    m.def("fac_backward_cpu", &torch_asg::fac_backward_cpu, "FAC backward");
+}
+#endif
