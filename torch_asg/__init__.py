@@ -1,1 +1,1 @@
-from .asg import ASG
+from .asg import ASGLoss

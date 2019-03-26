@@ -39,7 +39,7 @@ class FCC(torch.autograd.Function):
         return grad_transition, grad_inputs, None, None, None, None, None
 
 
-class ASG(nn.Module):
+class ASGLoss(nn.Module):
     def __init__(self, num_labels, scale_mode='none', reduction='mean'):
         super().__init__()
         self.num_labels = num_labels
