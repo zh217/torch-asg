@@ -123,8 +123,8 @@ def test_fac_2():
     assert (results - expected).abs().sum() < EPSILON, results.abs().sum()
     gradcheck(
         lambda inp, trans: FAC.apply(trans, inp, targets, torch.LongTensor([T]), torch.LongTensor([S]), 'none').sum(),
-        (inputs.clone().detach().requires_grad_(False),
-         transition.clone().detach().requires_grad_(True)))
+        (inputs.clone().detach().requires_grad_(True),
+         transition.clone().detach().requires_grad_(False)))
 
 
 def test_asg_1():
