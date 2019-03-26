@@ -36,13 +36,12 @@ inline scalar_t _log_sum_exp(scalar_t log_a, scalar_t log_b) {
 }
 
 template<typename scalar_t>
-inline void _d_log_sum_exp_2(scalar_t a, scalar_t b, scalar_t &grad_a, scalar_t &grad_b) {
+std::tuple<scalar_t, scalar_t> _d_log_sum_exp_2(scalar_t a, scalar_t b) {
     scalar_t m = std::max(a, b);
     a = std::exp(a - m);
     b = std::exp(b - m);
     scalar_t z = a + b;
-    grad_a = a / z;
-    grad_b = a / z;
+    return std::make_tuple(a / z, b / z);
 }
 
 CriterionScaleFn get_scale_fn(const std::string &scale_mode) {
@@ -295,18 +294,19 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
                     s == target_frame_upper - 1 &&
                     s > 0) {
                     // left wedge
-                    beta_prev_a[s - 1] += beta_cur_a[s];
+                    beta_prev_a[s - 1] += cur_elem_grad;
                     grad_next_trans_batch_a[s] += cur_elem_grad;
                 } else if (s == 0) {
                     // on the top row
-                    beta_prev_a[s] += beta_cur_a[s];
+                    beta_prev_a[s] += cur_elem_grad;
                     grad_self_trans_batch_a[s] += cur_elem_grad;
                 } else {
                     // general case: need to merge contribution from two paths
                     scalar_t hori_route = alpha_prev_frame_a[s] + self_trans_cur_batch_a[s];
                     scalar_t diag_route = alpha_prev_frame_a[s - 1] + next_trans_cur_batch_a[s];
-                    scalar_t grad_hori_route, grad_diag_route;
-                    _d_log_sum_exp_2(hori_route, diag_route, grad_hori_route, grad_diag_route);
+                    auto result = _d_log_sum_exp_2(hori_route, diag_route);
+                    scalar_t grad_hori_route = std::get<0>(result);
+                    scalar_t grad_diag_route = std::get<1>(result);
 
                     grad_hori_route *= cur_elem_grad;
                     grad_diag_route *= cur_elem_grad;
@@ -324,6 +324,7 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
     }
 
     for (int64_t b = 0; b < batch_size; ++b) {
+        int64_t target_length = std::min(target_lengths[b], batch_target_len);
         auto grad_self_trans_cur_batch_a = grad_self_trans_a[b];
         auto grad_next_trans_cur_batch_a = grad_next_trans_a[b];
         auto targets_batch_a = targets_a[b];
@@ -333,7 +334,7 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
 
         grad_transition_a[prev_target][prev_target] += grad_self_trans_cur_batch_a[0] * batch_grad;
 
-        for (int64_t s = 1; s < target_lengths[b]; ++s) {
+        for (int64_t s = 1; s < target_length; ++s) {
             auto cur_target = targets_batch_a[s];
             grad_transition_a[cur_target][cur_target] += grad_self_trans_cur_batch_a[s] * batch_grad;
             grad_transition_a[cur_target][prev_target] += grad_next_trans_cur_batch_a[s] * batch_grad;
@@ -593,7 +594,7 @@ std::vector<at::Tensor> fcc_loss_backward_cpu_template(
         for (int64_t t = input_length - 2; t >= 0; --t) {
             auto alpha_cur_frame_a = alpha_cur_batch_a[t];
             auto alpha_max_contrib_next_frame_a = alpha_max_contrib_cur_batch_a[t + 1];
-            auto grad_inputs_cur_frame_a = grad_transition_cur_batch_a[t];
+            auto grad_inputs_cur_frame_a = grad_inputs_cur_batch_a[t];
 
             beta_cur.zero_();
 

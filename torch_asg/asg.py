@@ -51,6 +51,7 @@ class ASGLoss(nn.Module):
         fac_result = FAC.apply(self.transition, inputs, targets, input_lengths, target_lengths, self.scale_mode)
         fcc_result = FCC.apply(self.transition, inputs, targets, input_lengths, target_lengths, self.scale_mode)
         result = fcc_result - fac_result
+        # result = fac_result
         if self.reduction == 'sum':
             return result.sum()
         elif self.reduction == 'mean':
