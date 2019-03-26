@@ -145,6 +145,7 @@ std::vector<at::Tensor> fac_loss_cpu_template(
             target_t cur_target = targets_cur_batch_a[s];
             self_trans_cur_batch_a[s] = transition_a[cur_target][cur_target];
             next_trans_cur_batch_a[s] = transition_a[cur_target][last_target];
+            last_target = cur_target;
         }
 
         auto alpha_prev_frame_a = alpha_cur_batch_a[0];
@@ -167,7 +168,8 @@ std::vector<at::Tensor> fac_loss_cpu_template(
             for (int64_t s = target_frame_lower; s < target_frame_upper; ++s) {
                 scalar_t hori_route = self_trans_cur_batch_a[s] + alpha_prev_frame_a[s];
                 scalar_t diag_route = next_trans_cur_batch_a[s] + alpha_prev_frame_a[s - 1];
-                alpha_cur_frame_a[s] = _log_sum_exp(hori_route, diag_route) + inputs_cur_frame_a[s];
+                alpha_cur_frame_a[s] =
+                        _log_sum_exp(hori_route, diag_route) + inputs_cur_frame_a[targets_cur_batch_a[s]];
             }
 
             if (target_frame_upper < target_length) {
@@ -180,8 +182,9 @@ std::vector<at::Tensor> fac_loss_cpu_template(
             alpha_prev_frame_a = alpha_cur_frame_a;
         }
 
-        scale[b] = scale_fn(num_labels, input_length, target_length);
-        out[b] = alpha_cur_batch_a[input_length - 1][target_length - 1];
+        scalar_t scale_val = scale_fn(num_labels, input_length, target_length);
+        scale[b] = scale_val;
+        out[b] = alpha_cur_batch_a[input_length - 1][target_length - 1] * scale_val;
     }
 
     return {out, alpha, scale, self_trans, next_trans};
@@ -324,7 +327,7 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
 
         auto beta_cur_a = beta_cur.accessor<scalar_t, 1>();
 
-        grad_input_cur_batch_a[0][0] += beta_cur_a[0] * grad_batch;
+        grad_input_cur_batch_a[0][targets_cur_batch_a[0]] += beta_cur_a[0] * grad_batch;
     }
 
     for (int64_t b = 0; b < batch_size; ++b) {

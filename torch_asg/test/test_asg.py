@@ -1,9 +1,11 @@
+import pytest
 import torch
 from torch.autograd import gradcheck
 from torch_asg import ASGLoss
 from torch_asg.asg import FCC, FAC
 
 
+@pytest.mark.skip()
 def test_run():
     num_labels = 7
     input_batch_len = 6
@@ -88,6 +90,25 @@ def test_fcc_3():
     #      transition.clone().detach().requires_grad_(True)))
 
 
+def test_fcc_grad():
+    torch.set_default_dtype(torch.float64)
+    B = 2
+    T = 8
+    S = 1
+    N = 3
+    inputs = torch.empty((T, B, N)).uniform_()
+    targets = torch.randint(0, N, (B, S))
+    transition = torch.empty((N, N)).uniform_()
+
+    def f(inputs, transition):
+        return FCC.apply(transition, inputs, targets, torch.LongTensor([T] * B), torch.LongTensor([S] * B),
+                         'target_size_sqrt').sum()
+
+    gradcheck(f,
+              (inputs.clone().detach().requires_grad_(True),
+               transition.clone().detach().requires_grad_(True)))
+
+
 def test_fac_1():
     torch.set_default_dtype(torch.float64)
     EPSILON = 1e-10
@@ -127,7 +148,31 @@ def test_fac_2():
          transition.clone().detach().requires_grad_(True)))
 
 
+# FIXME
+def test_fac_grad():
+    torch.set_default_dtype(torch.float64)
+    B = 3
+    T = 5
+    S = 3
+    N = 3
+    inputs = torch.empty((T, B, N)).uniform_()
+    targets = torch.tensor([[1, 2, 1],
+                            [0, 1, 0],
+                            [1, 0, 0], ])
+    transition = torch.empty((N, N)).uniform_()
+
+    def f(inputs, transition):
+        return FAC.apply(transition, inputs, targets[:B], torch.LongTensor([T] * B)[:B],
+                         torch.LongTensor([3, 2, 1][:B]),
+                         'target_size_sqrt').sum()
+
+    gradcheck(f,
+              (inputs[:, :B].clone().detach().requires_grad_(True),
+               transition.clone().detach().requires_grad_(False)))
+
+
 def test_asg_1():
+    torch.set_default_dtype(torch.float64)
     EPSILON = 1e-10
     B = 2
     T = 3
@@ -140,9 +185,13 @@ def test_asg_1():
     loss = asg.forward(inputs, targets, torch.tensor([T] * B), torch.tensor([S] * B))
     expected = torch.tensor([-torch.log(torch.tensor(0.5)), 0])
     assert (loss - expected).abs().sum() < EPSILON
+    gradcheck(
+        lambda inp: asg.forward(inp, targets, torch.tensor([T] * B), torch.tensor([S] * B)),
+        (inputs.clone().detach().requires_grad_(True)))
 
 
 def test_asg_2():
+    torch.set_default_dtype(torch.float64)
     EPSILON = 1e-10
     B = 1
     T = 3
@@ -154,6 +203,9 @@ def test_asg_2():
     loss = asg.forward(inputs, targets, torch.tensor([T]), torch.tensor([S]))
     expected = torch.tensor(32.).log_()
     assert (loss - expected).abs().sum() < EPSILON
+    gradcheck(
+        lambda inp: asg.forward(inp, targets, torch.tensor([T] * B), torch.tensor([S] * B)),
+        (inputs.clone().detach().requires_grad_(True)))
 
 
 def test_asg_3():
@@ -172,6 +224,7 @@ def test_asg_3():
 
 
 def test_asg_4():
+    torch.set_default_dtype(torch.float64)
     EPSILON = 1e-10
     B = 3
     T = 5
@@ -204,38 +257,41 @@ def test_asg_4():
     ]).view(B, S)
     asg = ASGLoss(N, reduction='none')
     loss = asg.forward(inputs, targets, torch.tensor([T] * B), torch.tensor([5, 3, 4]))
-    print(loss)
+    # print(loss)
     loss.sum().backward()
-    print(inputs_o.grad.view(B, T, N))
-    print(asg.transition.grad)
-    # expected_loss = torch.tensor([7.7417464256287,
-    #                               6.4200420379639,
-    #                               8.2780694961548, ])
-    # print(loss - expected_loss)
-    # expected_input_grad = torch.tensor([0.1060, 0.1595, -0.7639, 0.2485, 0.1118, 0.1380,
-    #                                     0.1915, -0.7524, 0.1539, 0.1175, 0.1717, 0.1178,
-    #                                     0.1738, 0.1137, 0.2288, 0.1216, 0.1678, -0.8057,
-    #                                     0.1766, -0.7923, 0.1902, 0.0988, 0.2056, 0.1210,
-    #                                     0.1212, 0.1422, 0.2059, -0.8160, 0.2166, 0.1300,
-    #
-    #                                     0.2029, 0.1164, 0.1325, 0.2383, -0.8032, 0.1131,
-    #                                     0.1414, 0.2602, 0.1263, -0.3441, -0.3009, 0.1172,
-    #                                     0.1557, 0.1788, 0.1496, -0.5498, 0.0140, 0.0516,
-    #                                     0.2306, 0.1219, 0.1503, -0.4244, 0.1796, -0.2579,
-    #                                     0.2149, 0.1745, 0.1160, 0.1271, 0.1350, -0.7675,
-    #
-    #                                     0.2195, 0.1458, 0.1770, -0.8395, 0.1307, 0.1666,
-    #                                     0.2148, 0.1237, -0.6613, -0.1223, 0.2191, 0.2259,
-    #                                     0.2002, 0.1077, -0.8386, 0.2310, 0.1440, 0.1557,
-    #                                     0.2197, -0.1466, -0.5742, 0.1510, 0.2160, 0.1342,
-    #                                     0.1050, -0.8265, 0.1714, 0.1917, 0.1488, 0.2094, ]).view(B, T, N).permute(1, 0,
-    #                                                                                                               2)
-    # expected_trans_grad = torch.tensor([0.3990, 0.3396, 0.3486, 0.3922, 0.3504, 0.3155,
-    #                                     0.3666, 0.0116, -1.6678, 0.3737, 0.3361, -0.7152,
-    #                                     0.3468, 0.3163, -1.1583, -0.6803, 0.3216, 0.2722,
-    #                                     0.3694, -0.6688, 0.3047, -0.8531, -0.6571, 0.2870,
-    #                                     0.3866, 0.3321, 0.3447, 0.3664, -0.2163, 0.3039,
-    #                                     0.3640, -0.6943, 0.2988, -0.6722, 0.3215, -0.1860, ]).view(N, N)
+    # print(inputs_o.grad.view(B, T, N))
+    # print(asg.transition.grad)
+    expected_loss = torch.tensor([7.7417464256287,
+                                  6.4200420379639,
+                                  8.2780694961548, ])
+    assert (loss - expected_loss).abs().sum() < 1e-3
+    expected_input_grad = torch.tensor([0.1060, 0.1595, -0.7639, 0.2485, 0.1118, 0.1380,
+                                        0.1915, -0.7524, 0.1539, 0.1175, 0.1717, 0.1178,
+                                        0.1738, 0.1137, 0.2288, 0.1216, 0.1678, -0.8057,
+                                        0.1766, -0.7923, 0.1902, 0.0988, 0.2056, 0.1210,
+                                        0.1212, 0.1422, 0.2059, -0.8160, 0.2166, 0.1300,
+
+                                        0.2029, 0.1164, 0.1325, 0.2383, -0.8032, 0.1131,
+                                        0.1414, 0.2602, 0.1263, -0.3441, -0.3009, 0.1172,
+                                        0.1557, 0.1788, 0.1496, -0.5498, 0.0140, 0.0516,
+                                        0.2306, 0.1219, 0.1503, -0.4244, 0.1796, -0.2579,
+                                        0.2149, 0.1745, 0.1160, 0.1271, 0.1350, -0.7675,
+
+                                        0.2195, 0.1458, 0.1770, -0.8395, 0.1307, 0.1666,
+                                        0.2148, 0.1237, -0.6613, -0.1223, 0.2191, 0.2259,
+                                        0.2002, 0.1077, -0.8386, 0.2310, 0.1440, 0.1557,
+                                        0.2197, -0.1466, -0.5742, 0.1510, 0.2160, 0.1342,
+                                        0.1050, -0.8265, 0.1714, 0.1917, 0.1488, 0.2094, ]).view(B, T, N).permute(1, 0,
+                                                                                                                  2)
+    # FIXME
+    assert (expected_input_grad - inputs_o.grad.view(T, B, N)).abs().max() < 1e-4
+    expected_trans_grad = torch.tensor([0.3990, 0.3396, 0.3486, 0.3922, 0.3504, 0.3155,
+                                        0.3666, 0.0116, -1.6678, 0.3737, 0.3361, -0.7152,
+                                        0.3468, 0.3163, -1.1583, -0.6803, 0.3216, 0.2722,
+                                        0.3694, -0.6688, 0.3047, -0.8531, -0.6571, 0.2870,
+                                        0.3866, 0.3321, 0.3447, 0.3664, -0.2163, 0.3039,
+                                        0.3640, -0.6943, 0.2988, -0.6722, 0.3215, -0.1860, ]).view(N, N)
+    assert (expected_trans_grad - asg.transition.grad).abs().max() < 1e-4
 
 # if __name__ == '__main__':
 #     test_run()
