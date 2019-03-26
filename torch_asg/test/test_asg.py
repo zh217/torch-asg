@@ -124,7 +124,7 @@ def test_fac_2():
     gradcheck(
         lambda inp, trans: FAC.apply(trans, inp, targets, torch.LongTensor([T]), torch.LongTensor([S]), 'none').sum(),
         (inputs.clone().detach().requires_grad_(True),
-         transition.clone().detach().requires_grad_(False)))
+         transition.clone().detach().requires_grad_(True)))
 
 
 def test_asg_1():

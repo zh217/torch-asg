@@ -248,7 +248,7 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
     auto self_trans_a = self_trans.accessor<scalar_t, 2>();
     auto next_trans_a = next_trans.accessor<scalar_t, 2>();
 
-    auto inputs_bf = inputs.permute({1, 0, 2}); // bf for batch-first
+//    auto inputs_bf = inputs.permute({1, 0, 2}); // bf for batch-first
 
     auto alpha_a = alpha.accessor<scalar_t, 3>();
     auto targets_a = targets.accessor<target_t, 2>();
@@ -273,13 +273,13 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
 
         // beta recursion
         for (int64_t t = input_length - 1; t > 0; --t) {
+            beta_prev.zero_();
+
             auto beta_cur_a = beta_cur.accessor<scalar_t, 1>();
             auto beta_prev_a = beta_prev.accessor<scalar_t, 1>();
 
             auto grad_input_cur_frame_a = grad_input_cur_batch_a[t];
             auto alpha_prev_frame_a = alpha_cur_batch_a[t - 1];
-
-            beta_prev.zero_();
 
             int64_t target_frame_lower = t > input_length - target_length ? target_length - (input_length - t) : 0;
             int64_t target_frame_upper = t < target_length ? t + 1 : target_length; // in range(1, target_length)
@@ -290,7 +290,7 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
 
                 grad_input_cur_frame_a[targets_cur_batch_a[s]] += grad_batch * cur_elem_grad;
 
-                if ((target_frame_upper < target_length || s == target_length - 1) &&
+                if ((target_frame_upper < target_length || t == target_length - 1) &&
                     s == target_frame_upper - 1 &&
                     s > 0) {
                     // left wedge
@@ -321,6 +321,10 @@ std::vector<at::Tensor> fac_loss_backward_cpu_template(
 
             std::swap(beta_cur, beta_prev);
         }
+
+        auto beta_cur_a = beta_cur.accessor<scalar_t, 1>();
+
+        grad_input_cur_batch_a[0][0] += beta_cur_a[0] * grad_batch;
     }
 
     for (int64_t b = 0; b < batch_size; ++b) {
