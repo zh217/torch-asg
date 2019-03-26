@@ -4,11 +4,12 @@ This repo contains a pytorch implementation of the auto segmentation criterion (
 [_Wav2Letter: an End-to-End ConvNet-based Speech Recognition System_](https://arxiv.org/abs/1609.03193) by Facebook.
 
 As mentioned in [this blog post](http://danielgalvez.me/jekyll/update/2018/01/12/wav2letter.html) by Daniel Galvez,
-ASG, being an alternative to the CTC criterion widely used in deep learning, has the advantage of being a globally
-normalized model without the conditional independence assumption of CTC and the potential of playing better with
+ASG, being an alternative to the connectionist temporal classification (CTC) criterion widely used in deep learning, 
+has the advantage of being a globally normalized model without the conditional independence assumption of CTC and the 
+potential of playing better with
 [WFST](https://en.wikipedia.org/wiki/Finite-state_transducer#Weighted_automata) frameworks. 
 
-Unfortunately, Facebook's implementation is in its official 
+Unfortunately, Facebook's implementation in its official 
 [wav2letter++](https://github.com/facebookresearch/wav2letter) project is based on the ArrayFire C++ framework, which 
 makes experimentation rather difficult. Hence we have ported the ASG implementation in wav2letter++ to pytorch as
 C++ extensions. For the CPU implementation we have stayed quite close to the original implementation, whereas for the
