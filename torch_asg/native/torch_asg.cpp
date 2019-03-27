@@ -454,14 +454,17 @@ std::vector<at::Tensor> fcc_loss_cpu_template(
             for (int64_t n_cur = 0; n_cur < num_labels; ++n_cur) {
                 scalar_t sum = 0.;
                 scalar_t max = neg_inf;
+                target_t max_label = -1;
 
-                for (int64_t n_prev = 0; n_prev < num_labels; ++n_prev) {
+                for (target_t n_prev = 0; n_prev < num_labels; ++n_prev) {
                     scalar_t z = transition_a[n_cur][n_prev] + alpha_prev_frame_a[n_prev];
                     if (max < z) {
-                        alpha_max_contrib_cur_frame_a[n_cur] = n_prev;
+                        max_label = n_prev;
                         max = z;
                     }
                 }
+
+                alpha_max_contrib_cur_frame_a[n_cur] = max_label;
 
                 for (int64_t n_prev = 0; n_prev < num_labels; ++n_prev) {
                     scalar_t z = transition_a[n_cur][n_prev] + alpha_prev_frame_a[n_prev];

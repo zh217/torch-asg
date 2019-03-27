@@ -8,9 +8,10 @@ setup(
     ext_modules=[CppExtension(name='torch_asg_native',
                               sources=['torch_asg/native/torch_asg.cpp'],
                               extra_compile_args=['-Wno-sign-compare', '-fopenmp']),
-                 CUDAExtension(name='torch_asg_cuda',
-                               sources=['torch_asg/native/torch_asg_cuda.cpp',
-                                        'torch_asg/native/torch_asg_cuda_kernel.cu'])],
+                 # CUDAExtension(name='torch_asg_cuda',
+                 #               sources=['torch_asg/native/torch_asg_cuda.cpp',
+                 #                        'torch_asg/native/torch_asg_cuda_kernel.cu'])
+                 ],
     cmdclass={'build_ext': BuildExtension},
     url='',
     license='',
