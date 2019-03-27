@@ -257,10 +257,7 @@ def test_asg_4():
     ]).view(B, S)
     asg = ASGLoss(N, reduction='none')
     loss = asg.forward(inputs, targets, torch.tensor([T] * B), torch.tensor([5, 3, 4]))
-    # print(loss)
     loss.sum().backward()
-    # print(inputs_o.grad.view(B, T, N))
-    # print(asg.transition.grad)
     expected_loss = torch.tensor([7.7417464256287,
                                   6.4200420379639,
                                   8.2780694961548, ])
@@ -283,8 +280,7 @@ def test_asg_4():
                                         0.2197, -0.1466, -0.5742, 0.1510, 0.2160, 0.1342,
                                         0.1050, -0.8265, 0.1714, 0.1917, 0.1488, 0.2094, ]).view(B, T, N).permute(1, 0,
                                                                                                                   2)
-    # FIXME
-    assert (expected_input_grad - inputs_o.grad.view(T, B, N)).abs().max() < 1e-4
+    assert (expected_input_grad - inputs_o.grad.view(B, T, N).permute(1, 0, 2)).abs().max() < 1e-4
     expected_trans_grad = torch.tensor([0.3990, 0.3396, 0.3486, 0.3922, 0.3504, 0.3155,
                                         0.3666, 0.0116, -1.6678, 0.3737, 0.3361, -0.7152,
                                         0.3468, 0.3163, -1.1583, -0.6803, 0.3216, 0.2722,
@@ -292,6 +288,3 @@ def test_asg_4():
                                         0.3866, 0.3321, 0.3447, 0.3664, -0.2163, 0.3039,
                                         0.3640, -0.6943, 0.2988, -0.6722, 0.3215, -0.1860, ]).view(N, N)
     assert (expected_trans_grad - asg.transition.grad).abs().max() < 1e-4
-
-# if __name__ == '__main__':
-#     test_run()
