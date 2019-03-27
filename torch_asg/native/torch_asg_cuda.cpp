@@ -28,16 +28,18 @@ std::vector<at::Tensor> fac_loss_gpu_template(
         const at::Tensor &targets, // batch_size * target_len
         IntArrayRef input_lengths, // batch_size
         IntArrayRef target_lengths, // batch_size
-        const std::string &scale_mode) {
+        const std::string &scale_mode
+) {
     return {};
 }
 
-std::vector<at::Tensor> fac_loss_gpu(const at::Tensor &transition,
-                                     const at::Tensor &inputs,
-                                     const at::Tensor &targets,
-                                     const at::Tensor &input_lengths, // batch_size
-                                     const at::Tensor &target_lengths, // batch_size
-                                     const std::string &scale_mode
+std::vector<at::Tensor> fac_loss_gpu(
+        const at::Tensor &transition,
+        const at::Tensor &inputs,
+        const at::Tensor &targets,
+        const at::Tensor &input_lengths, // batch_size
+        const at::Tensor &target_lengths, // batch_size
+        const std::string &scale_mode
 ) {
     at::Tensor input_lengths_ = input_lengths.toType(at::kLong).toBackend(at::Backend::CPU).contiguous();
     at::Tensor target_lengths_ = target_lengths.toType(at::kLong).toBackend(at::Backend::CPU).contiguous();
@@ -71,15 +73,16 @@ std::vector<at::Tensor> fac_loss_backward_gpu_template(
     return {};
 }
 
-std::vector<at::Tensor> fac_loss_backward_gpu(const at::Tensor &grad_out,
-                                              const at::Tensor &inputs, // batch_input_len * batch_size * num_labels
-                                              const at::Tensor &targets, // batch_size * target_len
-                                              const at::Tensor &input_lengths, // batch_size
-                                              const at::Tensor &target_lengths, // batch_size
-                                              const at::Tensor &alpha,
-                                              const at::Tensor &scale,
-                                              const at::Tensor &self_trans,
-                                              const at::Tensor &next_trans
+std::vector<at::Tensor> fac_loss_backward_gpu(
+        const at::Tensor &grad_out,
+        const at::Tensor &inputs, // batch_input_len * batch_size * num_labels
+        const at::Tensor &targets, // batch_size * target_len
+        const at::Tensor &input_lengths, // batch_size
+        const at::Tensor &target_lengths, // batch_size
+        const at::Tensor &alpha,
+        const at::Tensor &scale,
+        const at::Tensor &self_trans,
+        const at::Tensor &next_trans
 ) {
     at::Tensor input_lengths_ = input_lengths.toType(at::kLong).toBackend(at::Backend::CPU).contiguous();
     at::Tensor target_lengths_ = target_lengths.toType(at::kLong).toBackend(at::Backend::CPU).contiguous();
@@ -108,6 +111,30 @@ std::vector<at::Tensor> fcc_loss_gpu_template(
         IntArrayRef target_lengths, // batch_size
         const std::string &scale_mode
 ) {
+    using target_t = typename std::conditional<target_scalar_type == at::kInt, int, int64_t>::type;
+
+    at::CheckedFrom c = "fcc_loss_gpu";
+    auto transition_arg = at::TensorArg(transition, "transition", 1);
+    auto inputs_arg = at::TensorArg(inputs, "inputs", 2);
+    auto targets_arg = at::TensorArg(targets, "targets", 3);
+
+    at::checkAllSameGPU(c, {transition_arg, inputs_arg, targets_arg});
+    at::checkScalarType(c, targets_arg, target_scalar_type);
+    at::checkDim(c, transition_arg, 2);
+    at::checkDim(c, inputs_arg, 3);
+    at::checkDim(c, targets_arg, 2);
+
+    int64_t batch_input_len = inputs.size(0);
+    int64_t batch_target_len = targets.size(1);
+    int64_t batch_size = inputs.size(1);
+    int64_t num_labels = inputs.size(2);
+
+    AT_CHECK(transition.size(0) == num_labels && transition.size(1) == num_labels,
+             "inputs/transition matrix size mismatch");
+    AT_CHECK(targets.size(0) == batch_size, "inputs/targets batch size mismatch");
+    AT_CHECK(input_lengths.size() == batch_size, "input/input_lengths batch size mismatch");
+    AT_CHECK(target_lengths.size() == batch_size, "input/target_lengths batch size mismatch");
+
     return {};
 }
 

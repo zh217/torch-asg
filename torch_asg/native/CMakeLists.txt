@@ -5,6 +5,7 @@ project(torch_asg)
 
 find_package(Torch REQUIRED)
 find_package(pybind11 REQUIRED)
+find_package(CUDA REQUIRED)
 
 pybind11_add_module(torch_asg torch_asg.cpp torch_asg_cuda.cpp torch_asg_cuda_kernel.cu)
 
