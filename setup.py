@@ -8,12 +8,17 @@ except:
 
 ext_mods = [CppExtension(name='torch_asg_native',
                          sources=['torch_asg/native/torch_asg.cpp'],
-                         extra_compile_args=['-fopenmp'])]
+                         extra_compile_args=['-fopenmp', '-Ofast'])]
 
 if torch.cuda.is_available():
     ext_mods.append(CUDAExtension(name='torch_asg_cuda',
                                   sources=['torch_asg/native/torch_asg_cuda.cpp',
-                                           'torch_asg/native/torch_asg_cuda_kernel.cu']))
+                                           'torch_asg/native/torch_asg_cuda_kernel.cu'],
+                                  extra_compile_args={
+                                      'cxx': ['-O2', ],
+                                      'nvcc': ['--gpu-architecture=sm_70', '-O3', '--use_fast_math',
+                                               '--expt-extended-lambda'],
+                                  }))
 
 setup(
     name='torch_asg',
