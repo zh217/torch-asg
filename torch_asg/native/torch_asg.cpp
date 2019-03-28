@@ -18,7 +18,7 @@ using IntArrayRef = at::ArrayRef<int64_t>;
 using CriterionScaleFn = std::function<float(int64_t /* alphabet size */, int64_t /* timeframes */,
                                              int64_t /* labelsize */)>;
 
-IntArrayRef _convert_to_array_ref(const at::Tensor &t) {
+IntArrayRef _convert_to_array_ref_cuda(const at::Tensor &t) {
     return IntArrayRef{t.data<int64_t>(), static_cast<size_t>(t.numel())};
 }
 
@@ -203,13 +203,13 @@ std::vector<at::Tensor> fac_loss_cpu(
     return AT_DISPATCH_FLOATING_TYPES(inputs.type(), "fac_loss_cpu", [&] {
         if (targets.scalar_type() == at::kLong) {
             return fac_loss_cpu_template<scalar_t, at::kLong>(transition, inputs, targets,
-                                                              _convert_to_array_ref(input_lengths_),
-                                                              _convert_to_array_ref(target_lengths_),
+                                                              _convert_to_array_ref_cuda(input_lengths_),
+                                                              _convert_to_array_ref_cuda(target_lengths_),
                                                               scale_mode);
         } else {
             return fac_loss_cpu_template<scalar_t, at::kInt>(transition, inputs, targets,
-                                                             _convert_to_array_ref(input_lengths_),
-                                                             _convert_to_array_ref(target_lengths_),
+                                                             _convert_to_array_ref_cuda(input_lengths_),
+                                                             _convert_to_array_ref_cuda(target_lengths_),
                                                              scale_mode);
         }
     });
@@ -368,13 +368,13 @@ std::vector<at::Tensor> fac_loss_backward_cpu(
     return AT_DISPATCH_FLOATING_TYPES(inputs.type(), "fac_loss_backward_cpu", [&] {
         if (targets.scalar_type() == at::kLong) {
             return fac_loss_backward_cpu_template<scalar_t, at::kLong>(grad_out, inputs, targets,
-                                                                       _convert_to_array_ref(input_lengths_),
-                                                                       _convert_to_array_ref(target_lengths_),
+                                                                       _convert_to_array_ref_cuda(input_lengths_),
+                                                                       _convert_to_array_ref_cuda(target_lengths_),
                                                                        alpha, scale, self_trans, next_trans);
         } else {
             return fac_loss_backward_cpu_template<scalar_t, at::kInt>(grad_out, inputs, targets,
-                                                                      _convert_to_array_ref(input_lengths_),
-                                                                      _convert_to_array_ref(target_lengths_),
+                                                                      _convert_to_array_ref_cuda(input_lengths_),
+                                                                      _convert_to_array_ref_cuda(target_lengths_),
                                                                       alpha, scale, self_trans,
                                                                       next_trans);
         }
@@ -510,13 +510,13 @@ std::vector<at::Tensor> fcc_loss_cpu(
     return AT_DISPATCH_FLOATING_TYPES(inputs.type(), "fcc_loss_cpu", [&] {
         if (targets.scalar_type() == at::kLong) {
             return fcc_loss_cpu_template<scalar_t, at::kLong>(transition, inputs, targets,
-                                                              _convert_to_array_ref(input_lengths_),
-                                                              _convert_to_array_ref(target_lengths_),
+                                                              _convert_to_array_ref_cuda(input_lengths_),
+                                                              _convert_to_array_ref_cuda(target_lengths_),
                                                               scale_mode);
         } else {
             return fcc_loss_cpu_template<scalar_t, at::kInt>(transition, inputs, targets,
-                                                             _convert_to_array_ref(input_lengths_),
-                                                             _convert_to_array_ref(target_lengths_),
+                                                             _convert_to_array_ref_cuda(input_lengths_),
+                                                             _convert_to_array_ref_cuda(target_lengths_),
                                                              scale_mode);
         }
     });
@@ -658,13 +658,13 @@ std::vector<at::Tensor> fcc_loss_backward_cpu(
     return AT_DISPATCH_FLOATING_TYPES(inputs.type(), "fcc_loss_backward_cpu", [&] {
         if (targets.scalar_type() == at::kLong) {
             return fcc_loss_backward_cpu_template<scalar_t, at::kLong>(grad_out, transition, inputs, targets,
-                                                                       _convert_to_array_ref(input_lengths_),
-                                                                       _convert_to_array_ref(target_lengths_),
+                                                                       _convert_to_array_ref_cuda(input_lengths_),
+                                                                       _convert_to_array_ref_cuda(target_lengths_),
                                                                        alpha, alpha_max_contrib, scale);
         } else {
             return fcc_loss_backward_cpu_template<scalar_t, at::kInt>(grad_out, transition, inputs, targets,
-                                                                      _convert_to_array_ref(input_lengths_),
-                                                                      _convert_to_array_ref(target_lengths_),
+                                                                      _convert_to_array_ref_cuda(input_lengths_),
+                                                                      _convert_to_array_ref_cuda(target_lengths_),
                                                                       alpha, alpha_max_contrib, scale);
         }
     });

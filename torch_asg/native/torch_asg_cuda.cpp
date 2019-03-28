@@ -12,12 +12,15 @@
 #include <iostream>
 #include <vector>
 #include <limits>
+#include <type_traits>
+
+#include "torch_asg_cuda_kernel.h"
 
 namespace torch_asg {
 
 using IntArrayRef = at::ArrayRef<int64_t>;
 
-IntArrayRef _convert_to_array_ref(const at::Tensor &t) {
+IntArrayRef _convert_to_array_ref_cuda(const at::Tensor &t) {
     return IntArrayRef{t.data<int64_t>(), static_cast<size_t>(t.numel())};
 }
 
@@ -46,13 +49,13 @@ std::vector<at::Tensor> fac_loss_gpu(
     return AT_DISPATCH_FLOATING_TYPES(inputs.type(), "fac_loss_gpu", [&] {
         if (targets.scalar_type() == at::kLong) {
             return fac_loss_gpu_template<scalar_t, at::kLong>(transition, inputs, targets,
-                                                              _convert_to_array_ref(input_lengths_),
-                                                              _convert_to_array_ref(target_lengths_),
+                                                              _convert_to_array_ref_cuda(input_lengths_),
+                                                              _convert_to_array_ref_cuda(target_lengths_),
                                                               scale_mode);
         } else {
             return fac_loss_gpu_template<scalar_t, at::kInt>(transition, inputs, targets,
-                                                             _convert_to_array_ref(input_lengths_),
-                                                             _convert_to_array_ref(target_lengths_),
+                                                             _convert_to_array_ref_cuda(input_lengths_),
+                                                             _convert_to_array_ref_cuda(target_lengths_),
                                                              scale_mode);
         }
     });
@@ -89,13 +92,13 @@ std::vector<at::Tensor> fac_loss_backward_gpu(
     return AT_DISPATCH_FLOATING_TYPES(inputs.type(), "fac_loss_backward_gpu", [&] {
         if (targets.scalar_type() == at::kLong) {
             return fac_loss_backward_gpu_template<scalar_t, at::kLong>(grad_out, inputs, targets,
-                                                                       _convert_to_array_ref(input_lengths_),
-                                                                       _convert_to_array_ref(target_lengths_),
+                                                                       _convert_to_array_ref_cuda(input_lengths_),
+                                                                       _convert_to_array_ref_cuda(target_lengths_),
                                                                        alpha, scale, self_trans, next_trans);
         } else {
             return fac_loss_backward_gpu_template<scalar_t, at::kInt>(grad_out, inputs, targets,
-                                                                      _convert_to_array_ref(input_lengths_),
-                                                                      _convert_to_array_ref(target_lengths_),
+                                                                      _convert_to_array_ref_cuda(input_lengths_),
+                                                                      _convert_to_array_ref_cuda(target_lengths_),
                                                                       alpha, scale, self_trans,
                                                                       next_trans);
         }
@@ -130,10 +133,15 @@ std::vector<at::Tensor> fcc_loss_gpu_template(
     int64_t num_labels = inputs.size(2);
 
     AT_CHECK(transition.size(0) == num_labels && transition.size(1) == num_labels,
-             "inputs/transition matrix size mismatch");
-    AT_CHECK(targets.size(0) == batch_size, "inputs/targets batch size mismatch");
-    AT_CHECK(input_lengths.size() == batch_size, "input/input_lengths batch size mismatch");
-    AT_CHECK(target_lengths.size() == batch_size, "input/target_lengths batch size mismatch");
+             "inputs/transition matrix size mismatch")
+    AT_CHECK(targets.size(0) == batch_size, "inputs/targets batch size mismatch")
+    AT_CHECK(input_lengths.size() == batch_size, "input/input_lengths batch size mismatch")
+    AT_CHECK(target_lengths.size() == batch_size, "input/target_lengths batch size mismatch")
+
+    at::Tensor alpha = at::empty({batch_input_len, batch_target_len, num_labels}, inputs.options());
+    at::Tensor mult_temp = at::empty({batch_input_len, num_labels, num_labels}, inputs.options());
+
+    forward_template(transition, inputs, alpha, mult_temp);
 
     return {};
 }
@@ -151,13 +159,13 @@ std::vector<at::Tensor> fcc_loss_gpu(
     return AT_DISPATCH_FLOATING_TYPES(inputs.type(), "fcc_loss_gpu", [&] {
         if (targets.scalar_type() == at::kLong) {
             return fcc_loss_gpu_template<scalar_t, at::kLong>(transition, inputs, targets,
-                                                              _convert_to_array_ref(input_lengths_),
-                                                              _convert_to_array_ref(target_lengths_),
+                                                              _convert_to_array_ref_cuda(input_lengths_),
+                                                              _convert_to_array_ref_cuda(target_lengths_),
                                                               scale_mode);
         } else {
             return fcc_loss_gpu_template<scalar_t, at::kInt>(transition, inputs, targets,
-                                                             _convert_to_array_ref(input_lengths_),
-                                                             _convert_to_array_ref(target_lengths_),
+                                                             _convert_to_array_ref_cuda(input_lengths_),
+                                                             _convert_to_array_ref_cuda(target_lengths_),
                                                              scale_mode);
         }
     });
@@ -194,13 +202,13 @@ std::vector<at::Tensor> fcc_loss_backward_gpu(
     return AT_DISPATCH_FLOATING_TYPES(inputs.type(), "fcc_loss_backward_gpu", [&] {
         if (targets.scalar_type() == at::kLong) {
             return fcc_loss_backward_gpu_template<scalar_t, at::kLong>(grad_out, transition, inputs, targets,
-                                                                       _convert_to_array_ref(input_lengths_),
-                                                                       _convert_to_array_ref(target_lengths_),
+                                                                       _convert_to_array_ref_cuda(input_lengths_),
+                                                                       _convert_to_array_ref_cuda(target_lengths_),
                                                                        alpha, alpha_max_contrib, scale);
         } else {
             return fcc_loss_backward_gpu_template<scalar_t, at::kInt>(grad_out, transition, inputs, targets,
-                                                                      _convert_to_array_ref(input_lengths_),
-                                                                      _convert_to_array_ref(target_lengths_),
+                                                                      _convert_to_array_ref_cuda(input_lengths_),
+                                                                      _convert_to_array_ref_cuda(target_lengths_),
                                                                       alpha, alpha_max_contrib, scale);
         }
     });
