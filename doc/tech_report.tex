@@ -1,0 +1,118 @@
+\documentclass[a4paper]{article}
+\usepackage{amsmath}
+\usepackage{amssymb}
+\title{Something to think about regarding ASG}
+\author{Ziyang Hu}
+\begin{document}
+\maketitle
+\tableofcontents
+\section{The log semi-ring}
+
+\subsection{Arithmetic}
+
+On the extended real numbers $\bar{\mathbb{R}}=\mathbb{R}\cup \{-\infty\}$, define the operators $\oplus$ where
+\[
+x \oplus y = \log(e^x+e^y)
+\]
+which is usually called ``log-sum-exp'' in the literature, and $\otimes$ where
+\[
+x \otimes y = x + y.
+\]
+We can verify that these two operations are associative and commutative, and they satisfy the distributive law:
+\[
+x\otimes(y\oplus z) = (x\otimes y)\oplus(x\otimes z).
+\]
+We also define
+\[
+\bar{0} = -\infty, \qquad \bar{1} = 0
+\]
+and they have the properties
+\[
+\bar{0}\oplus x = x, \qquad \bar{0}\otimes x = \bar{0}, \qquad \bar{1}\otimes x = x.
+\]
+
+The structure $\oplus, \otimes, \bar{0}, \bar{1}$ forms a commutative semi-ring (in fact a semi-field).
+
+As we have associativity and commutativity at our disposal, we will define the big operators
+\[
+\bigoplus_{i=0}^{N-1} x_i = x_0 \oplus x_1 \oplus \cdots \oplus x_{N-1}
+\]
+and
+\[
+\bigotimes_{i=0}^{N-1} x_i = x_0 \otimes x_1 \otimes \cdots \otimes x_{N-1}.
+\]
+Finally, to reduce clutter, we assume that the arithmetic precedence of $\otimes$ is higher than $\oplus$, and both of them are of higher precedence than all ordinary arithmetic operations but of lower precedence than all functions. We also follow the generalized Einstein summation convention, where repeated indices are implicitly summed:
+\[
+z_{ij} = x_{ik}\otimes y_{kj} \equiv \bigoplus_{k} x_{ik}\otimes y_{kj}
+\]
+as long as the range of the repeated index $k$ can be deduced from context, there is no ambiguity.
+
+\subsection{Calculus}
+
+Let
+\[
+y = y(x_j), \qquad z = z(x_j),
+\]
+meaning that $y$, $z$ are both functions of $x_0, x_1, \ldots$, then
+\[
+\frac{\partial}{\partial x_i}(y \otimes z) = \frac{\partial y}{\partial x_i}\otimes\frac{\partial z}{\partial x_i}
+\]
+since $\otimes$ is just ordinary $+$. We can generalize further:
+\[
+\frac{\partial}{\partial x_i}\bigotimes_j w_j = \bigotimes_j \frac{\partial w_j}{\partial x_i}.
+\]
+The generalized addition is more complicated:
+\[
+\frac{\partial}{\partial x_i}(y\oplus z) = \frac{1}{e^y+e^z}\left(e^y \frac{\partial y}{\partial x_i} + e^z \frac{\partial z}{\partial x_i}\right)
+\]
+note the ordinary addition---they are not typos! For generalization:
+\[
+\frac{\partial}{\partial x_i}\bigoplus_j w_j = \frac{\sum_j e^{w_j}\frac{\partial w_j}{\partial x_i}}{\sum_j e^{w_j}}
+\]
+
+
+\section{Sequence to sequence model}
+
+\subsection{The input tensor}
+
+Assume that we have a tensor of sequence inputs $I_{tbi}$ where $b \in [0, B)$ is the batch index, $t \in [0, T)$ is the frame index, and $i \in [0, N)$ is the label index. We are also given a vector $L^I_b$ of positive integers denoting the number of active frames in each batch. Further, we are told that $I_{tbi} = \bar{0}$ for all $t \geq L^I_b$.
+
+For example, this could be features extracted from a batch of $B$ audio data, where each batch has at most $T$ frames of data, and each frame contains a $N$-vector of real-numbers. $L^I_b$ then gives the actual number of frames in each batch. Getting ahead of ourselves, the condition for $t \geq L^I_b$ then says that these out-of-bound frames should have zero contributions.
+
+\subsection{The output tensor}
+
+Assume that we are given, together with the input tensor, $O_{bs}$ where $b \in [0, B)$ is the batch index and $s \in [0, S)$ is the output index. We are also given a vector $L^O_b$ of the number of active outputs, analogous to $L^I_b$.
+
+Continuing our example, the output tensor could represent a transcription of the audio data where $S$ is the size of the extended alphabet used for the transcription (see later for what ``extended'' means here).
+
+\subsection{The transition matrix}
+
+\section{Lattices}
+
+\subsection{Paths and lattices}
+
+\subsection{The fully-connected lattice}
+
+\subsection{The force-alignment lattice}
+
+\section{Scores}
+
+\subsection{The fully-connected score}
+
+\subsection{The force-alignment score}
+
+\subsection{The auto-segmentation score}
+
+\section{Optimization}
+
+\subsection{Back-propagation on fully-connected lattice}
+
+\subsection{Back-propagation on force-alignment lattice}
+
+\section{Implementation}
+
+\subsection{CPU}
+
+\subsection{GPU}
+
+\end{document}
