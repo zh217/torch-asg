@@ -41,11 +41,13 @@ and
 \begin{equation}
 \bigotimes_{i=0}^{N-1} x_i = x_0 \otimes x_1 \otimes \cdots \otimes x_{N-1}.
 \end{equation}
-Finally, to reduce clutter, we assume that the arithmetic precedence of $\otimes$ is higher than $\oplus$, and both of them are of higher precedence than all ordinary arithmetic operations but of lower precedence than all functions. Unless explicitly noted otherwise, we also follow the generalized Einstein summation convention, where repeated indices are implicitly summed:
-\begin{equation}
-z_{ij} = x_{ik}\otimes y_{kj} \equiv \bigoplus_{k} x_{ik}\otimes y_{kj}
-\end{equation}
-as long as the range of the repeated index $k$ can be deduced from context, there is no ambiguity.
+Finally, to reduce clutter, we assume that the arithmetic precedence of $\otimes$ is higher than $\oplus$, and both of them are of higher precedence than all ordinary arithmetic operations but of lower precedence than all functions. 
+
+%Unless explicitly noted otherwise, we also follow the generalized Einstein summation convention, where repeated indices are implicitly summed:
+%\begin{equation}
+%z_{ij} = x_{ik}\otimes y_{kj} \equiv \bigoplus_{k} x_{ik}\otimes y_{kj}
+%\end{equation}
+%as long as the range of the repeated index $k$ can be deduced from context, there is no ambiguity.
 
 \subsection{Calculus}
 
@@ -99,12 +101,12 @@ The model is realized as a batch of weighted finite state acceptors labelled by 
 
 Now we have defined a lattice with states and edges. To make the lattice a finite state acceptor, we need to put labels on the edges. We associate with each edge $\mathbf{i}^b_{i}$ the label $i\in [0, N)$, with each edge $\mathbf{e}^b_{tij}$ the label $j \in [0, N)$, and with each edge $\mathbf{f}^b_i$ the special null label $\epsilon$.
 
-To further enhance our lattice to a weighted acceptor, we need to associate weights, or scores, on the edges as well. For $\mathbf{i}^b_{i}$, the weights are $W^{\mathbf{i}}_{bi} = I_{0bi}$, for $\mathbf{e}^b_{tij}$ the weights are $W_{tbij} = T_{ij} \otimes I_{t+1, b, j}$ (no summation over $j$), for $\mathbf{d}^b_{ti}$ the weights are $W^{\mathbf{f}}_{bi}=\bar{1}\equiv 0$.
+To further enhance our lattice to a weighted acceptor, we need to associate weights, or scores, on the edges as well. For $\mathbf{i}^b_{i}$, the weights are $W^{\mathbf{i}}_{bi} = I_{0bi}$, for $\mathbf{e}^b_{tij}$ the weights are $W^{t}_{bij} = T_{ij} \otimes I_{t+1, b, j}$, for $\mathbf{d}^b_{ti}$ the weights are $W^{\mathbf{f}}_{bi}=\bar{1}\equiv 0$.
 
 Our completed weighted finite state acceptor then represents the set of all possible scored transcriptions from a given tensor $I_{tbi}$ to the set of all possible outputs $O_{bs}$ for max output lengths $S \leq T$. Let's decode what this means. For a particular interpretation, for batch $b$, frame $t$ of the input is interpreted as the symbol $i$. Then state $\mathbf{S}^b_{ti}$ is active for this particular combination of $b, t, i$. Now we see that within each batch, for every $t$, only one of the states is active. Then there is a single active path $\pi^b:[0, T)\rightarrow [0, N)$ such that $\pi^b(t)=i$ from $\mathbf{I}^b$ to $\mathbf{F}^b$ for this interpretation. If we do the generalized product over all weights on this path, we get the score for this particular interpretation:
 \begin{equation}
 \label{eq:S_path}
-S_{\pi^b}= W^{\mathbf{i}}_{b,\pi^b(0)} \otimes \left(\bigotimes_{t=0}^{T-2}W_{t,b,\pi^b(t),\pi^b(t+1)}\right)\otimes W^{\mathbf{f}}_{b,\pi^b(t-1)}
+S_{\pi^b}= W^{\mathbf{i}}_{b,\pi^b(0)} \otimes \left(\bigotimes_{t=0}^{T-2}W^{t}_{b,\pi^b(t),\pi^b(t+1)}\right)\otimes W^{\mathbf{f}}_{b,\pi^b(t-1)}
 \end{equation}
 
 What is the output of this interpretation? Now we stipulate that to arrive at the output for this interpretation, we collapse all repeated labels, e.g.~$iijjjjkl\rightarrow ijkl$. In this way we deal with inputs and outputs with different lengths. What about repeated labels in the outputs? We simply eliminate them by introducing even more symbols. For example, if we want an output of $ijjklll$, we replace it with $ijr_2klr_3$, where $r_k$ can be read as ``repeat the previous label $k$ times''. If there is an upper bound on the potential number of repeated indices in the output, then this procedure does not forgo any expression power. Now our running audio data example should become crystal clear.
@@ -119,7 +121,39 @@ S^b_{\rm{full}} = \bigoplus_{\rm{all~}\pi^b} S_{\pi^b}
 \end{equation}
 where $S_{\pi^b}$ is given by \eqref{eq:S_path}. Well, the problem is the ``all $\pi^b$'' part. How many paths are there? For each $b$, there are exactly $N^T$ paths. For example, usually in speech recognition we have about the order $N=30, T=100$, then we need to deal with more than $5\times 10^{147}$ possible paths. Clearly we need to do something more clever. Dynamic programming, of course.
 
+Suppose that we many paths $\pi^b_k$ such that $\pi_k^b(t) = \pi^b_{k'}(t) \equiv \pi^b(t)$ for $t\leq T_0$. Then, applying distributivity,
+\begin{align}
+\bigoplus_k S_{\pi^b_k} =& W^{\mathbf{i}}_{b,\pi^b(0)} \otimes \left(\bigotimes_{t=0}^{T_0-1}W^t_{b,\pi^b(t),\pi^b(t+1)}\right)\otimes \\
+ &  \bigoplus_k\left(\left(\bigotimes_{t=T_0}^{T-2}W^t_{b,\pi^b(t),\pi^b(t+1)}\right)\otimes  W^{\mathbf{f}}_{b,\pi^b(t-1)}\right).
+\end{align}
+This represents a huge saving in computation since for $t\leq T_0$, we avoided an exponential number of identical calculations.
+
+Carrying this saving to the extreme, let us recursively define
+\begin{align}
+\alpha^0_{bi} &= W^{\mathbf{i}}_{bi} &&=I_{0bi} \\
+\alpha^t_{bi} &= \bigoplus_{j=0}^{N-1} W^{t-1}_{bij}\otimes \alpha^{t-1}_{bj} &&= \bigoplus_{j=0}^{N-1} T_{ij} \otimes I_{tbj} \otimes \alpha^{t-1}_{bj} \qquad 0 < t < T \\
+\alpha_b &= \bigoplus_{j=0}^{N-1} W^{\mathbf{f}}_{bj} \otimes \alpha^{T-1}_{bj} &&= \bigoplus_{j=0}^{N-1} \alpha^{T-1}_{bj},
+\end{align}
+then $\alpha_b$ is the total score for batch $b$. But of course we can go from the other direction as well: define
+\begin{align}
+\beta^{T-1}_{bi} &= W^{\mathbf{f}}_{bi} &&= 0 \\
+\beta^{t}_{bi} &= \bigoplus_{j=0}^{N-1}W^{t}_{bji}\otimes \beta^{t+1}_{bj} &&= \bigoplus_{j=0}^{N-1} T_{ji} \otimes I_{t+1,b,j} \otimes  \beta^{t+1}_{bj} \qquad 0 < t < T\\
+\beta_{b} &= \bigoplus_{j=0}^{N-1}W^{\mathbf{i}}_{bj}\otimes \beta^{0}_{bj} &&= \bigoplus_{j=0}^{N-1}I_{0bj}\otimes \beta^{0}_{bj},
+\end{align}
+then $\beta_b$ is the total score as well. It gets even better: we have, in general:
+\begin{equation}
+S^b_{\rm{full}} = \alpha_b = \beta_b = \bigoplus_{j=0}^{N-1}\alpha^t_{bi}\otimes \beta^t_{bi},\qquad \textrm{for all } 0 \leq t < T,
+\end{equation}
+because $\alpha^t_{bi}\otimes \beta^t_{bi}$ is the generalized score sum for all paths going through $\mathbf{S}^b_{ti}$. Now, to get the total score, we need only do about $\mathcal{O}(BTN)$ generalized sums and $\mathcal{O}(BTN^2)$ generalized products. This is certainly much more manageable than the exponential complexity before!
+
+Observe that each step in the recursion of $\alpha$ (resp.~$\beta$) depends only on the previous (resp.~next) frame. In particular, the calculation of $\alpha^t_{bi}$ for fixed $t, b$ and different $i$ are completely independent. The same goes for $\beta^{t}_{bi}$. This will become important when we want to parallelize the computation.
+
+
 \subsection{The force-alignment lattice}
+
+Now we bring $O_{bs}$ into the picture and consider only those paths in the original lattice that are compatible with $O_{bs}$ by our contraction scheme discussed before. This has the effect of vastly reducing the size of the lattice by removing all the inconsistent states and edges. Still, by judicious relabelling, we can get a very clean picture of the lattice after the reduction.
+
+\subsection{The Auto-Segmentation Criterion}
 
 \section{Optimization}
 
