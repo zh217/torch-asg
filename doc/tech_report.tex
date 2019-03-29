@@ -130,15 +130,19 @@ This represents a huge saving in computation since for $t\leq T_0$, we avoided a
 
 Carrying this saving to the extreme, let us recursively define
 \begin{align}
-\alpha^0_{bi} &= W^{\mathbf{i}}_{bi} &&=I_{0bi} \\
-\alpha^t_{bi} &= \bigoplus_{j=0}^{N-1} W^{t-1}_{bij}\otimes \alpha^{t-1}_{bj} &&= \bigoplus_{j=0}^{N-1} T_{ij} \otimes I_{tbj} \otimes \alpha^{t-1}_{bj} \qquad 0 < t < T \\
-\alpha_b &= \bigoplus_{j=0}^{N-1} W^{\mathbf{f}}_{bj} \otimes \alpha^{T-1}_{bj} &&= \bigoplus_{j=0}^{N-1} \alpha^{T-1}_{bj},
+\alpha^0_{bi} &= W^{\mathbf{i}}_{bi} =I_{0bi} \\
+\alpha^t_{bi} &= \bigoplus_{j=0}^{N-1} W^{t-1}_{bij}\otimes \alpha^{t-1}_{bj} \\
+&= \bigoplus_{j=0}^{N-1} T_{ij} + I_{tbj} + \alpha^{t-1}_{bj} \qquad 0 < t < T \\
+\alpha_b &= \bigoplus_{j=0}^{N-1} W^{\mathbf{f}}_{bj} \otimes \alpha^{T-1}_{bj}\\
+&= \bigoplus_{j=0}^{N-1} \alpha^{T-1}_{bj},
 \end{align}
 then $\alpha_b$ is the total score for batch $b$. But of course we can go from the other direction as well: define
 \begin{align}
-\beta^{T-1}_{bi} &= W^{\mathbf{f}}_{bi} &&= 0 \\
-\beta^{t}_{bi} &= \bigoplus_{j=0}^{N-1}W^{t}_{bji}\otimes \beta^{t+1}_{bj} &&= \bigoplus_{j=0}^{N-1} T_{ji} \otimes I_{t+1,b,j} \otimes  \beta^{t+1}_{bj} \qquad 0 < t < T\\
-\beta_{b} &= \bigoplus_{j=0}^{N-1}W^{\mathbf{i}}_{bj}\otimes \beta^{0}_{bj} &&= \bigoplus_{j=0}^{N-1}I_{0bj}\otimes \beta^{0}_{bj},
+\beta^{T-1}_{bi} &= W^{\mathbf{f}}_{bi} = 0 \\
+\beta^{t}_{bi} &= \bigoplus_{j=0}^{N-1}W^{t}_{bji}\otimes \beta^{t+1}_{bj} \\
+&= \bigoplus_{j=0}^{N-1} T_{ji} + I_{t+1,b,j} + \beta^{t+1}_{bj} \qquad 0 < t < T\\
+\beta_{b} &= \bigoplus_{j=0}^{N-1}W^{\mathbf{i}}_{bj}\otimes \beta^{0}_{bj} \\
+&= \bigoplus_{j=0}^{N-1}I_{0bj}+ \beta^{0}_{bj},
 \end{align}
 then $\beta_b$ is the total score as well. It gets even better: we have, in general:
 \begin{equation}
@@ -151,7 +155,40 @@ Observe that each step in the recursion of $\alpha$ (resp.~$\beta$) depends only
 
 \subsection{The force-alignment lattice}
 
-Now we bring $O_{bs}$ into the picture and consider only those paths in the original lattice that are compatible with $O_{bs}$ by our contraction scheme discussed before. This has the effect of vastly reducing the size of the lattice by removing all the inconsistent states and edges. Still, by judicious relabelling, we can get a very clean picture of the lattice after the reduction.
+Now we bring $O_{bs}$ into the picture. Ultimately, we want to calculate
+\begin{equation}
+S^b_{\rm{align}} = \bigoplus_{\rm{valid~}\pi^b}S_{\pi^b}.
+\end{equation}
+In the equation above, paths in the original lattice are valid with respect to $O_{bs}$ if they collapse to $O_{bs}$ by our contraction scheme discussed before. This has the effect of vastly reducing the size of the lattice by removing all the inconsistent states and edges. Still, by judicious relabelling, we can get a very clean picture of the lattice after the reduction.
+
+Consider a valid path $\pi^b$. If up to frame $t$ the decoded labels correspond to $O_{bs}$ for $s\in [0, S_0)$, what could $\pi^b(t+1)$ be? There are only two possibilities: it could either be $O_{bs}$ in which case the decoded labels still correspond to $s\in [0, S_0)$ due to collapse of identical labels, or $O_{b,s+1}$ in which case the decoded labels now corresponds to $s\in [0, S_0+1)$ by moving onto the next label.
+
+Motivated by this observation, we now define the force-alignment lattice, which can be obtained by removing states and edges (but sometimes also duplicating states and edges) as follows. The reduced input is now $\bar{I}_{tbs} = I_{t,b,\pi^b(s)}$ for $s \in [0, S)$, the identity transitions are $\bar{H}_{bs} = T_{\pi^b(s),\pi^b(s)}$ for $s \in [0, S)$, and the next transitions are $\bar{D}_{bs} = T_{\pi^b(s),\pi^b(s+1)}$ for $s \in [0, S-1)$. These three reduced tensors are the only ones that matter in the reduced lattice.
+
+For states, $\bar{\mathbf{S}}^b_{ts}$ is the state that at frame $t$ the path through it decodes to $\pi^b(s)$. For edges, $\bar{\mathbf{h}}^b_{ts}$ goes from $\bar{\mathbf{S}}^b_{ts}$ to $\bar{\mathbf{S}}^b_{t+1,s}$ (the collapse, or horizontal, route), and $\bar{\mathbf{d}}^b_{ts}$ goes from $\bar{\mathbf{S}}^b_{ts}$ to $\bar{\mathbf{S}}^b_{t+1,s+1}$ (the next, or diagonal route). In addition, now $\bar{\mathbf{i}}^b$ goes from the initial state $\mathbf{I}^b$ to $\bar{\mathbf{S}}^b_{00}$, and $\bar{\mathbf{f}}^b$ goes from $\bar{\mathbf{S}}^b_{T-1, S-1}$ to the final state $\mathbf{F}^b$.
+
+Note that some of the states are inaccessible for valid paths. For example, we can never get to state $\bar{\mathbf{S}}^b_{01}$. A state $\bar{\mathbf{S}}^b_{ts}$ is inaccessible if either $t-s<0$ or $t+S>=T$. The accessible states form a parallelogram leaning to the left.
+
+Next we put weights on the edges: on $\bar{\mathbf{i}}^b$ we have $\bar{W}^{\mathbf{i}}_b=\bar{I}_{0b0}$, on $\bar{\mathbf{f}}^b$ we have $\bar{W}^{\mathbf{f}}_b=\bar{1}=0$, on $\bar{\mathbf{h}}^t_{ts}$ we have $\bar{U}^t_{bs}=\bar{H}_{bs}\otimes\bar{I}_{t+1,b,s}$, and on $\bar{\mathbf{d}}^t_{ts}$ we have $\bar{V}^t_{bs}=\bar{D}_{bs}\otimes\bar{I}_{t+1,b, s+1}$.
+
+By doing the analogous thing as for the fully connected case, we have
+\begin{equation}
+S^b_{\rm{aligned}} = \bar\alpha_b = \bar\beta_b = \bigoplus_{s=0}^{S-1}\bar\alpha^t_{bs}\otimes \bar\beta^t_{bs},\qquad \textrm{for all } 0 \leq t < T,
+\end{equation}
+where we have defined
+\begin{align}
+\bar\alpha^0_{b} &= \bar{W}^{\mathbf{i}}_{b} =\bar{I}_{0b0} \\
+\bar\alpha^t_{b0} &= \bar{U}^{t-1}_{b0}\otimes\bar\alpha^{t-1}_{b0} 
+\\
+&=\bar{H}_{b0}+\bar{I}_{t,b,0}+\bar\alpha^{t-1}_{b0} \qquad 0<t<T \\
+\bar\alpha^t_{bs} &= (\bar{U}^{t-1}_{bs} \otimes\bar\alpha^{t-1}_{bs})\oplus (\bar{V}^{t-1}_{b,s-1} \otimes\bar\alpha^{t-1}_{b-1,s}) \\
+&= \bar{I}_{tbs} + (\bar{H}_{bs} + \bar\alpha^{t-1}_{bs})\oplus (\bar{D}_{b, s-1} + \bar\alpha^{t-1}_{b-1,s}) \qquad 0 < t < T, 0<s<S \\
+\bar\alpha_b &= \bar{W}^{\mathbf{f}}_{b} \otimes \bar\alpha^{T-1}_{b,S-1} = \bar\alpha^{T-1}_{b,S-1},
+\end{align}
+and
+\begin{align}
+y.
+\end{align}
 
 \subsection{The Auto-Segmentation Criterion}
 
