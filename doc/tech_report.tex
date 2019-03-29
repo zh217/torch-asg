@@ -11,97 +11,115 @@
 \subsection{Arithmetic}
 
 On the extended real numbers $\bar{\mathbb{R}}=\mathbb{R}\cup \{-\infty\}$, define the operators $\oplus$ where
-\[
+\begin{equation}
 x \oplus y = \log(e^x+e^y)
-\]
+\end{equation}
 which is usually called ``log-sum-exp'' in the literature, and $\otimes$ where
-\[
+\begin{equation}
 x \otimes y = x + y.
-\]
+\end{equation}
 We can verify that these two operations are associative and commutative, and they satisfy the distributive law:
-\[
+\begin{equation}
 x\otimes(y\oplus z) = (x\otimes y)\oplus(x\otimes z).
-\]
+\end{equation}
 We also define
-\[
+\begin{equation}
 \bar{0} = -\infty, \qquad \bar{1} = 0
-\]
+\end{equation}
 and they have the properties
-\[
+\begin{equation}
 \bar{0}\oplus x = x, \qquad \bar{0}\otimes x = \bar{0}, \qquad \bar{1}\otimes x = x.
-\]
+\end{equation}
 
 The structure $\oplus, \otimes, \bar{0}, \bar{1}$ forms a commutative semi-ring (in fact a semi-field).
 
 As we have associativity and commutativity at our disposal, we will define the big operators
-\[
+\begin{equation}
 \bigoplus_{i=0}^{N-1} x_i = x_0 \oplus x_1 \oplus \cdots \oplus x_{N-1}
-\]
+\end{equation}
 and
-\[
+\begin{equation}
 \bigotimes_{i=0}^{N-1} x_i = x_0 \otimes x_1 \otimes \cdots \otimes x_{N-1}.
-\]
-Finally, to reduce clutter, we assume that the arithmetic precedence of $\otimes$ is higher than $\oplus$, and both of them are of higher precedence than all ordinary arithmetic operations but of lower precedence than all functions. We also follow the generalized Einstein summation convention, where repeated indices are implicitly summed:
-\[
+\end{equation}
+Finally, to reduce clutter, we assume that the arithmetic precedence of $\otimes$ is higher than $\oplus$, and both of them are of higher precedence than all ordinary arithmetic operations but of lower precedence than all functions. Unless explicitly noted otherwise, we also follow the generalized Einstein summation convention, where repeated indices are implicitly summed:
+\begin{equation}
 z_{ij} = x_{ik}\otimes y_{kj} \equiv \bigoplus_{k} x_{ik}\otimes y_{kj}
-\]
+\end{equation}
 as long as the range of the repeated index $k$ can be deduced from context, there is no ambiguity.
 
 \subsection{Calculus}
 
 Let
-\[
+\begin{equation}
 y = y(x_j), \qquad z = z(x_j),
-\]
+\end{equation}
 meaning that $y$, $z$ are both functions of $x_0, x_1, \ldots$, then
-\[
+\begin{equation}
 \frac{\partial}{\partial x_i}(y \otimes z) = \frac{\partial y}{\partial x_i}\otimes\frac{\partial z}{\partial x_i}
-\]
+\end{equation}
 since $\otimes$ is just ordinary $+$. We can generalize further:
-\[
+\begin{equation}
 \frac{\partial}{\partial x_i}\bigotimes_j w_j = \bigotimes_j \frac{\partial w_j}{\partial x_i}.
-\]
+\end{equation}
 The generalized addition is more complicated:
-\[
+\begin{equation}
 \frac{\partial}{\partial x_i}(y\oplus z) = \frac{1}{e^y+e^z}\left(e^y \frac{\partial y}{\partial x_i} + e^z \frac{\partial z}{\partial x_i}\right)
-\]
+\end{equation}
 note the ordinary addition---they are not typos! For generalization:
-\[
+\begin{equation}
 \frac{\partial}{\partial x_i}\bigoplus_j w_j = \frac{\sum_j e^{w_j}\frac{\partial w_j}{\partial x_i}}{\sum_j e^{w_j}}
-\]
+\end{equation}
 
 
 \section{Sequence to sequence model}
 
 \subsection{The input tensor}
 
-Assume that we have a tensor of sequence inputs $I_{tbi}$ where $b \in [0, B)$ is the batch index, $t \in [0, T)$ is the frame index, and $i \in [0, N)$ is the label index. We are also given a vector $L^I_b$ of positive integers denoting the number of active frames in each batch. Further, we are told that $I_{tbi} = \bar{0}$ for all $t \geq L^I_b$.
+Assume that we have a tensor of sequence inputs $I_{tbi} \in \bar{\mathbb{R}}$ where $b \in [0, B)$ is the batch index, $t \in [0, T)$ is the frame index, and $i \in [0, N)$ is the label index. We are also given a vector $L^I_b$ of positive integers denoting the number of active frames in each batch. Further, we are told that $I_{tbi} = \bar{0}$ for all $t \geq L^I_b$.
 
 For example, this could be features extracted from a batch of $B$ audio data, where each batch has at most $T$ frames of data, and each frame contains a $N$-vector of real-numbers. $L^I_b$ then gives the actual number of frames in each batch. Getting ahead of ourselves, the condition for $t \geq L^I_b$ then says that these out-of-bound frames should have zero contributions.
 
 \subsection{The output tensor}
 
-Assume that we are given, together with the input tensor, $O_{bs}$ where $b \in [0, B)$ is the batch index and $s \in [0, S)$ is the output index. We are also given a vector $L^O_b$ of the number of active outputs, analogous to $L^I_b$.
+Assume that we are given, together with the input tensor, $O_{bs} \in [0, N)$ where $b \in [0, B)$ is the batch index and $s \in [0, S)$ is the output index. We are also given a vector $L^O_b$ of the number of active outputs, analogous to $L^I_b$.
 
-Continuing our example, the output tensor could represent a transcription of the audio data where $S$ is the size of the extended alphabet used for the transcription (see later for what ``extended'' means here).
+Continuing our example, the output tensor could represent a transcription of the audio data where $S$ is the batch length of the transcriptions, $L^I_b$ are the individual lengths, and $N$ is the size of the extended alphabet used for the transcription (see later for what ``extended'' means here). Recall that $N$ is also the bound of the label index for $I_{tbi}$, so that the labels in $I_{tbi}$ are related to the outputs in a way that we will specify later.
 
 \subsection{The transition matrix}
 
-\section{Lattices}
+We are also given $T_{ij} \in \bar{\mathbb{R}}$ for $i, j \in [0, N)$. The interpretation of $T_{ij}$ is the transition score from $j$ to $i$ to be used in a generalized multiplicative sense, i.e., for a vector $v_i$, after we apply the transition, it becomes $v'_{i} = T_{ij}\otimes v_j$. $T_{ij}$ is in general not symmetric.
 
-\subsection{Paths and lattices}
+For our running example, $T_{ij}$ could represent the transition scores from state $j$ to state $i$. The diagonal entries are the self transition scores which will be crucial for warping the inputs to outputs of different lengths, as we will see later. These scores could come from, e.g., the logarithm of the transition probabilities of a bigram language model.
+
+\subsection{Lattice and paths}
+
+Now we can finally construct our sequence to sequence model. First, let's talk about notation. In the following, bold letters are used for all symbols which are used as place-markers and which have no numerical values per se. Upper case symbols denote states, whereas lower case symbols denote edges. Italics will continue to denote tensors with numerical values or indices.
+
+The model is realized as a batch of weighted finite state acceptors labelled by the batch index $b\in [0, B)$. Within each batch, the states are denoted with symbols $\mathbf{S}^{b}_{ti}$ (note that the index structure is the same as $I_{tbi}$). There are also an initial state $\mathbf{I}^b$ and a final state $\mathbf{F}^b$. Between the states, there are edges denoted by the symbols $\mathbf{e}^b_{tij}$ from $\mathbf{S}^b_{ti}$ to $\mathbf{S}^b_{t+1,j}$ for all $t<T-1$. Finally, there are the initial edges $\mathbf{i}^b_{i}$ from $\mathbf{I}^b$ to $\mathbf{S}^b_{0,s}$ and the final edges $\mathbf{f}^b_{i}$ from $\mathbf{S}^b_{T-1,i}$ to $\mathbf{f}^b$. So, in total we have $B(TN+2)$ states and $BN((T-1)N+2)$ edges.
+
+Now we have defined a lattice with states and edges. To make the lattice a finite state acceptor, we need to put labels on the edges. We associate with each edge $\mathbf{i}^b_{i}$ the label $i\in [0, N)$, with each edge $\mathbf{e}^b_{tij}$ the label $j \in [0, N)$, and with each edge $\mathbf{f}^b_i$ the special null label $\epsilon$.
+
+To further enhance our lattice to a weighted acceptor, we need to associate weights, or scores, on the edges as well. For $\mathbf{i}^b_{i}$, the weights are $W^{\mathbf{i}}_{bi} = I_{0bi}$, for $\mathbf{e}^b_{tij}$ the weights are $W_{tbij} = T_{ij} \otimes I_{t+1, b, j}$ (no summation over $j$), for $\mathbf{d}^b_{ti}$ the weights are $W^{\mathbf{f}}_{bi}=\bar{1}\equiv 0$.
+
+Our completed weighted finite state acceptor then represents the set of all possible scored transcriptions from a given tensor $I_{tbi}$ to the set of all possible outputs $O_{bs}$ for max output lengths $S \leq T$. Let's decode what this means. For a particular interpretation, for batch $b$, frame $t$ of the input is interpreted as the symbol $i$. Then state $\mathbf{S}^b_{ti}$ is active for this particular combination of $b, t, i$. Now we see that within each batch, for every $t$, only one of the states is active. Then there is a single active path $\pi^b:[0, T)\rightarrow [0, N)$ such that $\pi^b(t)=i$ from $\mathbf{I}^b$ to $\mathbf{F}^b$ for this interpretation. If we do the generalized product over all weights on this path, we get the score for this particular interpretation:
+\begin{equation}
+\label{eq:S_path}
+S_{\pi^b}= W^{\mathbf{i}}_{b,\pi^b(0)} \otimes \left(\bigotimes_{t=0}^{T-2}W_{t,b,\pi^b(t),\pi^b(t+1)}\right)\otimes W^{\mathbf{f}}_{b,\pi^b(t-1)}
+\end{equation}
+
+What is the output of this interpretation? Now we stipulate that to arrive at the output for this interpretation, we collapse all repeated labels, e.g.~$iijjjjkl\rightarrow ijkl$. In this way we deal with inputs and outputs with different lengths. What about repeated labels in the outputs? We simply eliminate them by introducing even more symbols. For example, if we want an output of $ijjklll$, we replace it with $ijr_2klr_3$, where $r_k$ can be read as ``repeat the previous label $k$ times''. If there is an upper bound on the potential number of repeated indices in the output, then this procedure does not forgo any expression power. Now our running audio data example should become crystal clear.
+
+Note that we have a certain inelegant asymmetry between the ``forward'' direction $t\rightarrow t+1$ and the ``backward'' direction $t\rightarrow t-1$ due to the placement of weights. We could restore symmetry by placing the weights $I_{tbi}$ directly on the states $\mathbf{S}^b_{ti}$ instead, but this complicates the computation, so we will just live with this inelegance.
 
 \subsection{The fully-connected lattice}
 
+Ignoring $O_{bs}$ for a moment, for given $I_{tbi}$ and $T_{ij}$, can we calculate the total score, meaning the contribution from all possible paths, for our lattice? Sure, it is as simple as
+\begin{equation}
+S^b_{\rm{full}} = \bigoplus_{\rm{all~}\pi^b} S_{\pi^b}
+\end{equation}
+where $S_{\pi^b}$ is given by \eqref{eq:S_path}. Well, the problem is the ``all $\pi^b$'' part. How many paths are there? For each $b$, there are exactly $N^T$ paths. For example, usually in speech recognition we have about the order $N=30, T=100$, then we need to deal with more than $5\times 10^{147}$ possible paths. Clearly we need to do something more clever. Dynamic programming, of course.
+
 \subsection{The force-alignment lattice}
-
-\section{Scores}
-
-\subsection{The fully-connected score}
-
-\subsection{The force-alignment score}
-
-\subsection{The auto-segmentation score}
 
 \section{Optimization}
 
