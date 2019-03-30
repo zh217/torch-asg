@@ -65,13 +65,26 @@ since $\otimes$ is just ordinary $+$. We can generalize further:
 \end{equation}
 The generalized addition is more complicated:
 \begin{equation}
+\label{eq:gen_add}
 \frac{\partial}{\partial x_i}(y\oplus z) = \frac{1}{e^y+e^z}\left(e^y \frac{\partial y}{\partial x_i} + e^z \frac{\partial z}{\partial x_i}\right)
 \end{equation}
 note the ordinary addition---they are not typos! For generalization:
 \begin{equation}
+\label{eq:gen_sum}
 \frac{\partial}{\partial x_i}\bigoplus_j w_j = \frac{\sum_j e^{w_j}\frac{\partial w_j}{\partial x_i}}{\sum_j e^{w_j}}
 \end{equation}
 
+\subsection{Generalization}
+
+More generally, we can define the generalized addition using base-$B$ exponential and logarithms as
+\begin{equation}
+x\oplus_B y = \log_B(B^x+B^x) = \frac{1}{\log B}\log(e^{x\log B} + e^{y \log B})
+\end{equation}
+then every formula we have so far derived remains valid, except that for \eqref{eq:gen_add} and \eqref{eq:gen_sum} we need to replace $e$ by $B$. Note that in the limit $B\rightarrow +\infty$, we get the tropical semi-ring
+\begin{equation}
+x\oplus_{\rm{T}} y = \max(x,y)
+\end{equation}
+where calculus is obviously problematic now. In general, in our models we could make $\log B$ a tunable parameter, corresponding to something like the ``temperature'' of the model.
 
 \section{Sequence to sequence model}
 
@@ -101,7 +114,7 @@ The model is realized as a batch of weighted finite state acceptors labelled by 
 
 Now we have defined a lattice with states and edges. To make the lattice a finite state acceptor, we need to put labels on the edges. We associate with each edge $\mathbf{i}^b_{i}$ the label $i\in [0, N)$, with each edge $\mathbf{e}^b_{tij}$ the label $j \in [0, N)$, and with each edge $\mathbf{f}^b_i$ the special null label $\epsilon$.
 
-To further enhance our lattice to a weighted acceptor, we need to associate weights, or scores, on the edges as well. For $\mathbf{i}^b_{i}$, the weights are $W^{\mathbf{i}}_{bi} = I_{0bi}$, for $\mathbf{e}^b_{tij}$ the weights are $W^{t}_{bij} = T_{ij} \otimes I_{t+1, b, j}$, for $\mathbf{d}^b_{ti}$ the weights are $W^{\mathbf{f}}_{bi}=\bar{1}\equiv 0$.
+To further enhance our lattice to a weighted acceptor, we need to associate weights, or scores, on the edges as well. For $\mathbf{i}^b_{i}$, the weights are $W^{\mathbf{i}}_{bi} = I_{0bi}$, for $\mathbf{e}^b_{tij}$ the weights are $W^{t}_{bij} = T_{ji} \otimes I_{t+1, b, j}$, for $\mathbf{d}^b_{ti}$ the weights are $W^{\mathbf{f}}_{bi}=\bar{1}\equiv 0$.
 
 Our completed weighted finite state acceptor then represents the set of all possible scored transcriptions from a given tensor $I_{tbi}$ to the set of all possible outputs $O_{bs}$ for max output lengths $S \leq T$. Let's decode what this means. For a particular interpretation, for batch $b$, frame $t$ of the input is interpreted as the symbol $i$. Then state $\mathbf{S}^b_{ti}$ is active for this particular combination of $b, t, i$. Now we see that within each batch, for every $t$, only one of the states is active. Then there is a single active path $\pi^b:[0, T)\rightarrow [0, N)$ such that $\pi^b(t)=i$ from $\mathbf{I}^b$ to $\mathbf{F}^b$ for this interpretation. If we do the generalized product over all weights on this path, we get the score for this particular interpretation:
 \begin{equation}
@@ -131,27 +144,55 @@ This represents a huge saving in computation since for $t\leq T_0$, we avoided a
 Carrying this saving to the extreme, let us recursively define
 \begin{align}
 \alpha^0_{bi} &= W^{\mathbf{i}}_{bi} =I_{0bi} \\
-\alpha^t_{bi} &= \bigoplus_{j=0}^{N-1} W^{t-1}_{bij}\otimes \alpha^{t-1}_{bj} \\
-&= \bigoplus_{j=0}^{N-1} T_{ij} + I_{tbj} + \alpha^{t-1}_{bj} \qquad 0 < t < T \\
+\label{eq::alpha_mat_prod}
+\alpha^t_{bi} &= \bigoplus_{j=0}^{N-1} W^{t-1}_{bji}\otimes \alpha^{t-1}_{bj} \\
+&= \bigoplus_{j=0}^{N-1} (I_{tbi} + T_{ij} + \alpha^{t-1}_{bj})\\
+&= I_{tbi} + \bigoplus_{j=0}^{N-1} (T_{ij} + \alpha^{t-1}_{bj}) \qquad 0 < t < T \\
 \alpha_b &= \bigoplus_{j=0}^{N-1} W^{\mathbf{f}}_{bj} \otimes \alpha^{T-1}_{bj}\\
 &= \bigoplus_{j=0}^{N-1} \alpha^{T-1}_{bj},
 \end{align}
 then $\alpha_b$ is the total score for batch $b$. But of course we can go from the other direction as well: define
 \begin{align}
 \beta^{T-1}_{bi} &= W^{\mathbf{f}}_{bi} = 0 \\
-\beta^{t}_{bi} &= \bigoplus_{j=0}^{N-1}W^{t}_{bji}\otimes \beta^{t+1}_{bj} \\
+\label{eq::beta_mat_prod}
+\beta^{t}_{bi} &= \bigoplus_{j=0}^{N-1}W^{t}_{bij}\otimes \beta^{t+1}_{bj} \\
 &= \bigoplus_{j=0}^{N-1} T_{ji} + I_{t+1,b,j} + \beta^{t+1}_{bj} \qquad 0 < t < T\\
 \beta_{b} &= \bigoplus_{j=0}^{N-1}W^{\mathbf{i}}_{bj}\otimes \beta^{0}_{bj} \\
 &= \bigoplus_{j=0}^{N-1}I_{0bj}+ \beta^{0}_{bj},
 \end{align}
 then $\beta_b$ is the total score as well. It gets even better: we have, in general:
 \begin{equation}
-S^b_{\rm{full}} = \alpha_b = \beta_b = \bigoplus_{j=0}^{N-1}\alpha^t_{bi}\otimes \beta^t_{bi},\qquad \textrm{for all } 0 \leq t < T,
+S^b_{\rm{full}} = \alpha_b = \beta_b = \bigoplus_{j=0}^{N-1}\alpha^t_{bi}\otimes \beta^t_{bi}\equiv  \bigoplus_{j=0}^{N-1}\gamma^t_{bi},\qquad \textrm{for all } 0 \leq t < T,
 \end{equation}
-because $\alpha^t_{bi}\otimes \beta^t_{bi}$ is the generalized score sum for all paths going through $\mathbf{S}^b_{ti}$. Now, to get the total score, we need only do about $\mathcal{O}(BTN)$ generalized sums and $\mathcal{O}(BTN^2)$ generalized products. This is certainly much more manageable than the exponential complexity before!
+because $\gamma^t_{bi}\equiv\alpha^t_{bi}\otimes \beta^t_{bi}$ is the generalized score sum for all paths going through $\mathbf{S}^b_{ti}$. Now, by na\"ive counting, to get the total score, we need only do about $\mathcal{O}(BTN^2)$ generalized sums and $\mathcal{O}(BTN^2)$ generalized products. But we can actually still do better. Remember that generalized products are actually plain additions, which is very fast, so we would expect that for most problems the dominating factor is the generalized additions. But if we look at \eqref{eq::alpha_mat_prod} and \eqref{eq::beta_mat_prod} carefully, we see that they are in the form of generalized matrix product, and more efficient algorithms for calculating generalized matrix product exist.
 
 Observe that each step in the recursion of $\alpha$ (resp.~$\beta$) depends only on the previous (resp.~next) frame. In particular, the calculation of $\alpha^t_{bi}$ for fixed $t, b$ and different $i$ are completely independent. The same goes for $\beta^{t}_{bi}$. This will become important when we want to parallelize the computation.
 
+Next we want the derivatives of $S_{\rm{full}}^b$ with respect to $I_{tbj}$ and $T_{ij}$. First we have
+\begin{equation}
+\Delta I_{tbi} \equiv \frac{\partial S^b_{\rm{full}}}{\partial\gamma^t_{bi}}=\frac{\partial S^b_{\rm{full}}}{\partial\alpha^t_{bi}}=\frac{\partial S^b_{\rm{full}}}{\partial\beta^t_{bi}}=\frac{\partial S^b_{\rm{full}}}{\partial I_{tbi}}=\frac{e^{\gamma^t_{bi}}}{\sum_k e^{\gamma^t_{bk}}}
+\end{equation}
+Next,
+\begin{align}
+\frac{\partial\alpha^t_{bi}}{\partial W^{t-1}_{bji}}=\frac{e^{W^{t-1}_{bji}+\alpha^{t-1}_{bj}}}{\sum_k e^{W^{t-1}_{bki}+\alpha^{t-1}_{bk}}},
+\end{align}
+so we have\footnote{
+Note that 
+\begin{equation}
+\frac{\partial\alpha^t_{bi}}{\partial T_{ij}}\neq\frac{\partial\alpha^t_{bi}}{\partial W^{t-1}_{bji}}
+\end{equation}
+because there is also contribution from $\alpha^{t-1}_{bi}$. To actually derive the stated result, introduce, for every $t>0$, $T^t_{ij}=T_{ij}$, and use it in the definition of $\alpha^t_{bi}$. Then since $T^t_{ij}$ decouples with respect to $t$, we have
+\begin{equation}
+\frac{\partial\alpha^t_{bi}}{\partial T^{t}_{ij}}=\frac{\partial\alpha^t_{bi}}{\partial W^{t-1}_{bji}}.
+\end{equation}
+Finally, by the chain rule,
+\begin{equation}
+\frac{\partial S^b_{\rm{full}}}{\partial T_{ij}}=\sum_{t=1}^{T-1}\frac{\partial S^b_{\rm{full}}}{\partial T^t_{ij}}.
+\end{equation}
+},
+\begin{equation}
+\Delta T_{ij} \equiv \frac{\partial S^b_{\rm{full}}}{\partial T_{ij}} = \sum_{t=1}^{S-1} \Delta I_{tbi}\frac{e^{W^{t-1}_{bji}+\alpha^{t-1}_{bj}}}{\sum_k e^{W^{t-1}_{bki}+\alpha^{t-1}_{bk}}}.
+\end{equation}
 
 \subsection{The force-alignment lattice}
 
@@ -165,38 +206,81 @@ Consider a valid path $\pi^b$. If up to frame $t$ the decoded labels correspond 
 
 Motivated by this observation, we now define the force-alignment lattice, which can be obtained by removing states and edges (but sometimes also duplicating states and edges) as follows. The reduced input is now $\bar{I}_{tbs} = I_{t,b,\pi^b(s)}$ for $s \in [0, S)$, the identity transitions are $\bar{H}_{bs} = T_{\pi^b(s),\pi^b(s)}$ for $s \in [0, S)$, and the next transitions are $\bar{D}_{bs} = T_{\pi^b(s),\pi^b(s+1)}$ for $s \in [0, S-1)$. These three reduced tensors are the only ones that matter in the reduced lattice.
 
-For states, $\bar{\mathbf{S}}^b_{ts}$ is the state that at frame $t$ the path through it decodes to $\pi^b(s)$. For edges, $\bar{\mathbf{h}}^b_{ts}$ goes from $\bar{\mathbf{S}}^b_{ts}$ to $\bar{\mathbf{S}}^b_{t+1,s}$ (the collapse, or horizontal, route), and $\bar{\mathbf{d}}^b_{ts}$ goes from $\bar{\mathbf{S}}^b_{ts}$ to $\bar{\mathbf{S}}^b_{t+1,s+1}$ (the next, or diagonal route). In addition, now $\bar{\mathbf{i}}^b$ goes from the initial state $\mathbf{I}^b$ to $\bar{\mathbf{S}}^b_{00}$, and $\bar{\mathbf{f}}^b$ goes from $\bar{\mathbf{S}}^b_{T-1, S-1}$ to the final state $\mathbf{F}^b$.
+For states, $\bar{\mathbf{S}}^b_{ts}$ is the state that at frame $t$ the path through it decodes to $\pi^b(s)$. For edges, $\bar{\mathbf{h}}^b_{ts}$ goes from $\bar{\mathbf{S}}^b_{ts}$ to $\bar{\mathbf{S}}^b_{t+1,s}$ (the collapse, or horizontal, route), and $\bar{\mathbf{d}}^b_{ts}$ goes from $\bar{\mathbf{S}}^b_{ts}$ to $\bar{\mathbf{S}}^b_{t+1,s+1}$ (the next, or diagonal route).
 
 Note that some of the states are inaccessible for valid paths. For example, we can never get to state $\bar{\mathbf{S}}^b_{01}$. A state $\bar{\mathbf{S}}^b_{ts}$ is inaccessible if either $t-s<0$ or $t+S>=T$. The accessible states form a parallelogram leaning to the left.
 
-Next we put weights on the edges: on $\bar{\mathbf{i}}^b$ we have $\bar{W}^{\mathbf{i}}_b=\bar{I}_{0b0}$, on $\bar{\mathbf{f}}^b$ we have $\bar{W}^{\mathbf{f}}_b=\bar{1}=0$, on $\bar{\mathbf{h}}^t_{ts}$ we have $\bar{U}^t_{bs}=\bar{H}_{bs}\otimes\bar{I}_{t+1,b,s}$, and on $\bar{\mathbf{d}}^t_{ts}$ we have $\bar{V}^t_{bs}=\bar{D}_{bs}\otimes\bar{I}_{t+1,b, s+1}$.
+It remains to link the initial and final states. We could have an edge $\bar{\mathbf{i}}^b_0$ going from the initial state $\mathbf{I}^b$ to $\bar{\mathbf{S}}^b_{00}$, and another edge $\bar{\mathbf{f}}^b_{S-1}$ going from $\bar{\mathbf{S}}^b_{T-1, S-1}$ to the final state $\mathbf{F}^b$. This has the advantage of successfully making all the inaccessible states unreachable. The problem is that this requires computation to deal with many special cases. So instead, we will also link all the states $\bar{\mathbf{S}}^t_{0s}$, even inaccessible ones, to the initial state via $\bar{\mathbf{i}}^b_s$, and link all the states $\bar{\mathbf{S}}^b_{T-1, s}$ to the final state via $\bar{\mathbf{f}}^b_{s}$. We will deal with inaccessible states using weights.
 
-By doing the analogous thing as for the fully connected case, we have
-\begin{equation}
-S^b_{\rm{aligned}} = \bar\alpha_b = \bar\beta_b = \bigoplus_{s=0}^{S-1}\bar\alpha^t_{bs}\otimes \bar\beta^t_{bs},\qquad \textrm{for all } 0 \leq t < T,
-\end{equation}
-where we have defined
+Next we put weights on the edges: on $\bar{\mathbf{i}}^b_0$ we have $\bar{W}^{\mathbf{i}}_{b0}=\bar{I}_{0b0}$, on $\bar{\mathbf{i}}^b_s$ for $s>0$ we have $\bar{W}^{\mathbf{i}}_{bs}=\bar{0}=-\infty$, on $\bar{\mathbf{f}}^b_{S-1}$ we have $\bar{W}^{\mathbf{f}}_{b,S-1}=\bar{1}=0$, on $\bar{\mathbf{f}}^b_{s}$ for $s<S-1$ we have $\bar{W}^{\mathbf{f}}_{bs}=\bar{0}=-\infty$, on $\bar{\mathbf{h}}^t_{ts}$ we have $\bar{U}^t_{bs}=\bar{H}_{bs}\otimes\bar{I}_{t+1,b,s}$, and on $\bar{\mathbf{d}}^t_{ts}$ we have $\bar{V}^t_{bs}=\bar{D}_{bs}\otimes\bar{I}_{t+1,b, s+1}$.
+
+Similar to the fully connected case, we define
 \begin{align}
-\bar\alpha^0_{b} &= \bar{W}^{\mathbf{i}}_{b} =\bar{I}_{0b0} \\
+\bar\alpha^0_{b0} &= \bar{W}^{\mathbf{i}}_{b0} =\bar{I}_{0b0} \\
+\bar\alpha^0_{bs} &= \bar{W}^{\mathbf{i}}_{bs} =-\infty && s>0\\
 \bar\alpha^t_{b0} &= \bar{U}^{t-1}_{b0}\otimes\bar\alpha^{t-1}_{b0} 
 \\
-&=\bar{H}_{b0}+\bar{I}_{t,b,0}+\bar\alpha^{t-1}_{b0} \qquad 0<t<T \\
+&=\bar{H}_{b0}+\bar{I}_{t,b,0}+\bar\alpha^{t-1}_{b0} && 0<t<T \\
 \bar\alpha^t_{bs} &= (\bar{U}^{t-1}_{bs} \otimes\bar\alpha^{t-1}_{bs})\oplus (\bar{V}^{t-1}_{b,s-1} \otimes\bar\alpha^{t-1}_{b-1,s}) \\
-&= \bar{I}_{tbs} + (\bar{H}_{bs} + \bar\alpha^{t-1}_{bs})\oplus (\bar{D}_{b, s-1} + \bar\alpha^{t-1}_{b-1,s}) \qquad 0 < t < T, 0<s<S \\
-\bar\alpha_b &= \bar{W}^{\mathbf{f}}_{b} \otimes \bar\alpha^{T-1}_{b,S-1} = \bar\alpha^{T-1}_{b,S-1},
+&= \bar{I}_{tbs} + (\bar{H}_{bs} + \bar\alpha^{t-1}_{bs})\oplus (\bar{D}_{b, s-1} + \bar\alpha^{t-1}_{b-1,s}) && 0 < t < T, 0<s<S \\
+\bar\alpha_b &= \bigoplus_{s=0}^{S-1} \bar{W}^{\mathbf{f}}_{bs} \otimes \bar\alpha^{T-1}_{b,s} = \bar\alpha^{T-1}_{b,S-1},
 \end{align}
-and
+and also
 \begin{align}
-y.
+\bar\beta^{T-1}_{b,S-1} &= \bar{W}^{\mathbf{f}}_{b,S-1} =1 \\
+\bar\beta^{T-1}_{bs} &= \bar{W}^{\mathbf{f}}_{bs} =-\infty && s<S-1\\
+\bar\beta^t_{b,S-1} &= \bar{U}^{t}_{b,S-1}\otimes\bar\beta^{t+1}_{b,S-1} 
+\\
+&=\bar{H}_{b,S-1}+\bar{I}_{t+1,b,S-1}+\bar\beta^{t+1}_{b,S-1} && 0\leq t<T-1 \\
+\bar\beta^t_{bs} &= (\bar{U}^{t}_{bs} \otimes\bar\beta^{t+1}_{bs})\oplus (\bar{V}^{t}_{bs} \otimes\bar\beta^{t+1}_{b+1,s}) \\
+&= (\bar{H}_{bs} + \bar{I}_{t+1,b,s} + \bar\beta^{t+1}_{bs})\oplus (\bar{D}_{bs} + \bar{I}_{t+1,b, s+1} + \bar\beta^{t+1}_{b+1,s}) && 0 \leq t < T-1, 0\leq s<S-1 \\
+\bar\beta_b &= \bigoplus_{s=0}^{S+1}\bar{W}^{\mathbf{f}}_{bs} \otimes \bar\beta^{0}_{bs} = \bar{I}_{0b0}  + \bar\beta^{0}_{0},
+\end{align}
+and so we have
+\begin{equation}
+S^b_{\rm{aligned}} = \bar\alpha_b = \bar\beta_b = \bigoplus_{s=0}^{S-1}\bar\alpha^t_{bs}\otimes \bar\beta^t_{bs}\equiv \bigoplus_{s=0}^{S-1}\bar\gamma^t_{bs},\qquad \textrm{for all } 0 \leq t < T,
+\end{equation}
+where $\bar\gamma^t_{bs} \equiv \bar\alpha^t_{bs}\otimes \bar\beta^t_{bs}$.
+We can check that our judicious placement of weights make the contribution of paths going through inaccessible states as if they were not there, since for every inaccessible path, at least one edge alone the path has weight $\bar{0}$. For reference, the number of generalized sums and products are in this case both $\mathcal{O}(BTS)$.
+
+Now we derive the derivatives. This is more complicated than the fully connected case because the lattice is more complicated. First
+\begin{equation}
+\Delta \bar{I}_{tbs} \equiv \frac{\partial S^b_{\rm{aligned}}}{\partial\bar\gamma^t_{bs}}=\frac{\partial S^b_{\rm{aligned}}}{\partial\bar\alpha^t_{bs}}=\frac{\partial S^b_{\rm{aligned}}}{\partial\bar\beta^t_{bs}}=\frac{\partial S^b_{\rm{aligned}}}{\partial \bar I_{tbs}}=\frac{e^{\bar\gamma^t_{bs}}}{\sum_r e^{\bar\gamma^t_{br}}},
+\end{equation}
+note that this is $0$ if $\bar\gamma^t_{bs}=-\infty$, so inaccessible states do not contribute. 
+\begin{align}
+\frac{\partial \bar\alpha^t_{b0}}{\partial \bar{U}^{t-1}_{b0}} &= 1, 
+&& t>0 \\
+\frac{\partial \bar\alpha^t_{bs}}{\partial \bar{U}^{t-1}_{bs}}
+&=\frac{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b-1,s}}},
+&& t>0, s>0\\
+\frac{\partial \bar\alpha^t_{b0}}{\partial \bar{V}^{t-1}_{b,s-1}}
+&=\frac{e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b-1,s}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b-1,s}}},
+&& t>0, s>0
 \end{align}
 
+\begin{equation}
+\Delta\bar{H}_{bs}
+\end{equation}
+\begin{equation}
+\Delta\bar{D}_{bs}
+\end{equation}
+
+\begin{equation}
+\Delta I_{tbi}
+\end{equation}
+\begin{equation}
+\Delta T_{ij}
+\end{equation}
 \subsection{The Auto-Segmentation Criterion}
 
-\section{Optimization}
+\begin{equation}
+S^b_{\rm{ASG}} = S^b_{\rm{aligned}} - S^b_{\rm{full}}
+\end{equation}
 
-\subsection{Back-propagation on fully-connected lattice}
-
-\subsection{Back-propagation on force-alignment lattice}
+\begin{equation}
+L^b_{\rm{ASG}} = -S^b_{\rm{ASG}} = S^b_{\rm{full}} - S^b_{\rm{aligned}}
+\end{equation}
 
 \section{Implementation}
 
