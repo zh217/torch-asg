@@ -6,6 +6,7 @@
 \begin{document}
 \maketitle
 \tableofcontents
+\newpage
 \section{The log semi-ring}
 
 \subsection{Arithmetic}
@@ -41,7 +42,7 @@ and
 \begin{equation}
 \bigotimes_{i=0}^{N-1} x_i = x_0 \otimes x_1 \otimes \cdots \otimes x_{N-1}.
 \end{equation}
-Finally, to reduce clutter, we assume that the arithmetic precedence of $\otimes$ is higher than $\oplus$, and both of them are of higher precedence than all ordinary arithmetic operations but of lower precedence than all functions. 
+%Finally, to reduce clutter, we assume that the arithmetic precedence of $\otimes$ is higher than $\oplus$, and both of them are of higher precedence than all ordinary arithmetic operations but of lower precedence than all functions. 
 
 %Unless explicitly noted otherwise, we also follow the generalized Einstein summation convention, where repeated indices are implicitly summed:
 %\begin{equation}
@@ -68,7 +69,7 @@ The generalized addition is more complicated:
 \label{eq:gen_add}
 \frac{\partial}{\partial x_i}(y\oplus z) = \frac{1}{e^y+e^z}\left(e^y \frac{\partial y}{\partial x_i} + e^z \frac{\partial z}{\partial x_i}\right)
 \end{equation}
-note the ordinary addition---they are not typos! For generalization:
+note the ordinary addition. For generalization:
 \begin{equation}
 \label{eq:gen_sum}
 \frac{\partial}{\partial x_i}\bigoplus_j w_j = \frac{\sum_j e^{w_j}\frac{\partial w_j}{\partial x_i}}{\sum_j e^{w_j}}
@@ -191,7 +192,7 @@ Finally, by the chain rule,
 \end{equation}
 },
 \begin{equation}
-\Delta T_{ij} \equiv \frac{\partial S^b_{\rm{full}}}{\partial T_{ij}} = \sum_{t=1}^{S-1} \Delta I_{tbi}\frac{e^{W^{t-1}_{bji}+\alpha^{t-1}_{bj}}}{\sum_k e^{W^{t-1}_{bki}+\alpha^{t-1}_{bk}}}.
+\Delta T_{ij} \equiv \sum_{b=0}^{B-1}\frac{\partial S^b_{\rm{full}}}{\partial T_{ij}} = \sum_{b=0}^{B-1}\sum_{t=1}^{S-1} \Delta I_{tbi}\frac{e^{W^{t-1}_{bji}+\alpha^{t-1}_{bj}}}{\sum_k e^{W^{t-1}_{bki}+\alpha^{t-1}_{bk}}}.
 \end{equation}
 
 \subsection{The force-alignment lattice}
@@ -247,45 +248,49 @@ Now we derive the derivatives. This is more complicated than the fully connected
 \begin{equation}
 \Delta \bar{I}_{tbs} \equiv \frac{\partial S^b_{\rm{aligned}}}{\partial\bar\gamma^t_{bs}}=\frac{\partial S^b_{\rm{aligned}}}{\partial\bar\alpha^t_{bs}}=\frac{\partial S^b_{\rm{aligned}}}{\partial\bar\beta^t_{bs}}=\frac{\partial S^b_{\rm{aligned}}}{\partial \bar I_{tbs}}=\frac{e^{\bar\gamma^t_{bs}}}{\sum_r e^{\bar\gamma^t_{br}}},
 \end{equation}
-note that this is $0$ if $\bar\gamma^t_{bs}=-\infty$, so inaccessible states do not contribute. 
+note that this is $0$ if $\bar\gamma^t_{bs}=-\infty$, so inaccessible states do not contribute. Then, for $\bar U^{t}_{bs}$ and $\bar V^{t}_{bs}$,
 \begin{align}
 \frac{\partial \bar\alpha^t_{b0}}{\partial \bar{U}^{t-1}_{b0}} &= 1, 
 && t>0 \\
 \frac{\partial \bar\alpha^t_{bs}}{\partial \bar{U}^{t-1}_{bs}}
 &=\frac{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b-1,s}}},
 && t>0, s>0\\
-\frac{\partial \bar\alpha^t_{b0}}{\partial \bar{V}^{t-1}_{b,s-1}}
+\frac{\partial \bar\alpha^t_{bs}}{\partial \bar{V}^{t-1}_{b,s-1}}
 &=\frac{e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b-1,s}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b-1,s}}},
 && t>0, s>0
 \end{align}
-
-\begin{equation}
-\Delta\bar{H}_{bs}
-\end{equation}
-\begin{equation}
-\Delta\bar{D}_{bs}
-\end{equation}
-
-\begin{equation}
-\Delta I_{tbi}
-\end{equation}
-\begin{equation}
-\Delta T_{ij}
-\end{equation}
+therefore,
+\begin{align}
+\Delta\bar{H}_{bs}&\equiv\frac{\partial S^b_{\rm{aligned}}}{\partial\bar{H}_{bs}}
+=\sum_{t=1}^{T-1}\sum_{s=0}^{S-1}\frac{\partial S^b_{\rm{aligned}}}{\partial\bar\alpha^t_{bs}}\frac{\partial\bar\alpha^t_{bs}}{\partial\bar U^{t-1}_{bs}}\\
+&=\sum_{t=1}^{T-1}\left(\Delta\bar I_{tb0}+\sum_{s=1}^{S-1}\Delta\bar I_{tbs}\frac{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b-1,s}}}\right)\\
+\Delta\bar{D}_{bs}&\equiv\frac{\partial S^b_{\rm{aligned}}}{\partial\bar{D}_{bs}}
+=\sum_{t=1}^{T-1}\sum_{s=1}^{S-1}\frac{\partial S^b_{\rm{aligned}}}{\partial\bar\alpha^t_{bs}}\frac{\partial\bar\alpha^t_{bs}}{\partial\bar V^{t-1}_{b,s-1}}\\
+&=\sum_{t=1}^{T-1}\sum_{s=1}^{S-1}\Delta\bar I_{tbs}\frac{e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b-1,s}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b-1,s}}}.
+\end{align}
+What we actually want, however, is derivatives with respect to the original inputs $I_{tbi}$ and $T_{ij}$. We have
+\begin{align}
+\Delta I_{tbi}&=\sum_{s=0}^{S-1}\Delta\bar I_{tbs}\delta_{\pi^b(s),i}\\
+\Delta T_{ii}&=\sum_{b=0}^{B-1}\sum_{s=0}^{S-1}\Delta\bar H_{bs} \delta_{\pi^b(s),i}\\
+\Delta T_{ij}&=\sum_{b=0}^{B-1}\sum_{s=0}^{S-2}\Delta\bar D_{bs} \delta_{\pi^b(s),i}\delta_{\pi^b(s+1),j} && i\neq j,
+\end{align}
+where $\delta_{ij}$ is Kronecker delta function.
 \subsection{The Auto-Segmentation Criterion}
-
+We want an overall score that encourages alignments compatible with the given $O_{bs}$ and discourages all other alignments. Such a score is given by
 \begin{equation}
-S^b_{\rm{ASG}} = S^b_{\rm{aligned}} - S^b_{\rm{full}}
+S^b_{\rm{ASG}} = S^b_{\rm{aligned}} - S^b_{\rm{full}}.
+\end{equation}
+This can be motivated by, e.g., taking $I_{tbi}$ to be log-probabilities with respect to fixed $t$ and $b$, but note that our model does not enforce the normalization that is implied by probabilities.
+
+In doing gradient descent, we want a loss instead of a score, which is easily obtained by reversing the sign:
+\begin{equation}
+L^b_{\rm{ASG}} = -S^b_{\rm{ASG}} = S^b_{\rm{full}} - S^b_{\rm{aligned}}.
 \end{equation}
 
-\begin{equation}
-L^b_{\rm{ASG}} = -S^b_{\rm{ASG}} = S^b_{\rm{full}} - S^b_{\rm{aligned}}
-\end{equation}
+%\section{Implementation}
 
-\section{Implementation}
+%\subsection{CPU}
 
-\subsection{CPU}
-
-\subsection{GPU}
+%\subsection{GPU}
 
 \end{document}
