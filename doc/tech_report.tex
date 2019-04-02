@@ -222,8 +222,8 @@ Similar to the fully connected case, we define
 \bar\alpha^t_{b0} &= \bar{U}^{t-1}_{b0}\otimes\bar\alpha^{t-1}_{b0} 
 \\
 &=\bar{H}_{b0}+\bar{I}_{t,b,0}+\bar\alpha^{t-1}_{b0} && 0<t<T \\
-\bar\alpha^t_{bs} &= (\bar{U}^{t-1}_{bs} \otimes\bar\alpha^{t-1}_{bs})\oplus (\bar{V}^{t-1}_{b,s-1} \otimes\bar\alpha^{t-1}_{b-1,s}) \\
-&= \bar{I}_{tbs} + (\bar{H}_{bs} + \bar\alpha^{t-1}_{bs})\oplus (\bar{D}_{b, s-1} + \bar\alpha^{t-1}_{b-1,s}) && 0 < t < T, 0<s<S \\
+\bar\alpha^t_{bs} &= (\bar{U}^{t-1}_{bs} \otimes\bar\alpha^{t-1}_{bs})\oplus (\bar{V}^{t-1}_{b,s-1} \otimes\bar\alpha^{t-1}_{b,s-1}) \\
+&= \bar{I}_{tbs} + (\bar{H}_{bs} + \bar\alpha^{t-1}_{bs})\oplus (\bar{D}_{b, s-1} + \bar\alpha^{t-1}_{b,s-1}) && 0 < t < T, 0<s<S \\
 \bar\alpha_b &= \bigoplus_{s=0}^{S-1} \bar{W}^{\mathbf{f}}_{bs} \otimes \bar\alpha^{T-1}_{b,s} = \bar\alpha^{T-1}_{b,S-1},
 \end{align}
 and also
@@ -233,8 +233,8 @@ and also
 \bar\beta^t_{b,S-1} &= \bar{U}^{t}_{b,S-1}\otimes\bar\beta^{t+1}_{b,S-1} 
 \\
 &=\bar{H}_{b,S-1}+\bar{I}_{t+1,b,S-1}+\bar\beta^{t+1}_{b,S-1} && 0\leq t<T-1 \\
-\bar\beta^t_{bs} &= (\bar{U}^{t}_{bs} \otimes\bar\beta^{t+1}_{bs})\oplus (\bar{V}^{t}_{bs} \otimes\bar\beta^{t+1}_{b+1,s}) \\
-&= (\bar{H}_{bs} + \bar{I}_{t+1,b,s} + \bar\beta^{t+1}_{bs})\oplus (\bar{D}_{bs} + \bar{I}_{t+1,b, s+1} + \bar\beta^{t+1}_{b+1,s}) && 0 \leq t < T-1, 0\leq s<S-1 \\
+\bar\beta^t_{bs} &= (\bar{U}^{t}_{bs} \otimes\bar\beta^{t+1}_{bs})\oplus (\bar{V}^{t}_{bs} \otimes\bar\beta^{t+1}_{b,s+1}) \\
+&= (\bar{H}_{bs} + \bar{I}_{t+1,b,s} + \bar\beta^{t+1}_{bs})\oplus (\bar{D}_{bs} + \bar{I}_{t+1,b, s+1} + \bar\beta^{t+1}_{b,s+1}) && 0 \leq t < T-1, 0\leq s<S-1 \\
 \bar\beta_b &= \bigoplus_{s=0}^{S+1}\bar{W}^{\mathbf{f}}_{bs} \otimes \bar\beta^{0}_{bs} = \bar{I}_{0b0}  + \bar\beta^{0}_{0},
 \end{align}
 and so we have
@@ -253,20 +253,20 @@ note that this is $0$ if $\bar\gamma^t_{bs}=-\infty$, so inaccessible states do 
 \frac{\partial \bar\alpha^t_{b0}}{\partial \bar{U}^{t-1}_{b0}} &= 1, 
 && t>0 \\
 \frac{\partial \bar\alpha^t_{bs}}{\partial \bar{U}^{t-1}_{bs}}
-&=\frac{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b-1,s}}},
+&=\frac{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b,s-1}}},
 && t>0, s>0\\
 \frac{\partial \bar\alpha^t_{bs}}{\partial \bar{V}^{t-1}_{b,s-1}}
-&=\frac{e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b-1,s}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b-1,s}}},
+&=\frac{e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b-1,s}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b,s-1}}},
 && t>0, s>0
 \end{align}
 therefore,
 \begin{align}
 \Delta\bar{H}_{bs}&\equiv\frac{\partial S^b_{\rm{aligned}}}{\partial\bar{H}_{bs}}
 =\sum_{t=1}^{T-1}\sum_{s=0}^{S-1}\frac{\partial S^b_{\rm{aligned}}}{\partial\bar\alpha^t_{bs}}\frac{\partial\bar\alpha^t_{bs}}{\partial\bar U^{t-1}_{bs}}\\
-&=\sum_{t=1}^{T-1}\left(\Delta\bar I_{tb0}+\sum_{s=1}^{S-1}\Delta\bar I_{tbs}\frac{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b-1,s}}}\right)\\
+&=\sum_{t=1}^{T-1}\left(\Delta\bar I_{tb0}+\sum_{s=1}^{S-1}\Delta\bar I_{tbs}\frac{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b,s-1}}}\right)\\
 \Delta\bar{D}_{bs}&\equiv\frac{\partial S^b_{\rm{aligned}}}{\partial\bar{D}_{bs}}
 =\sum_{t=1}^{T-1}\sum_{s=1}^{S-1}\frac{\partial S^b_{\rm{aligned}}}{\partial\bar\alpha^t_{bs}}\frac{\partial\bar\alpha^t_{bs}}{\partial\bar V^{t-1}_{b,s-1}}\\
-&=\sum_{t=1}^{T-1}\sum_{s=1}^{S-1}\Delta\bar I_{tbs}\frac{e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b-1,s}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b-1,s}}}.
+&=\sum_{t=1}^{T-1}\sum_{s=1}^{S-1}\Delta\bar I_{tbs}\frac{e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b,s-1}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b,s-1}}}.
 \end{align}
 What we actually want, however, is derivatives with respect to the original inputs $I_{tbi}$ and $T_{ij}$. We have
 \begin{align}
