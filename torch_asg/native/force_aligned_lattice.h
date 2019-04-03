@@ -7,4 +7,21 @@
 
 #include "utils.h"
 
+namespace torch_asg {
+
+std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor>
+force_aligned_forward(
+        at::Tensor &inputs,
+        at::Tensor &outputs,
+        at::Tensor &transition,
+        at::Tensor &input_lengths,
+        at::Tensor &output_lengths,
+        int64_t batch_input_len,
+        int64_t num_batches,
+        int64_t num_labels,
+        int64_t batch_output_len
+);
+
+}
+
 #endif //TORCH_ASG_FORCE_ALIGNED_LATTICE_H

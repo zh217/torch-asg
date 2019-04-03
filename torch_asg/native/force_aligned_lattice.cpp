@@ -150,6 +150,25 @@ force_aligned_beta_recursion(
 
 template<typename scalar_t>
 at::Tensor
+collect_scores(
+        at::Tensor &alpha,
+        at::Tensor &input_lengths,
+        at::Tensor &output_lengths,
+        int64_t num_batches
+) {
+    at::Tensor result = at::empty({num_batches}, alpha.options());
+    auto alpha_a = alpha.accessor<scalar_t, 3>();
+    auto result_a = result.accessor<scalar_t, 1>();
+    auto input_lengths_a = input_lengths.accessor<int64_t, 1>();
+    auto output_lengths_a = output_lengths.accessor<int64_t, 1>();
+    for (int64_t b = 0; b < num_batches; ++b) {
+        result_a[b] = alpha_a[input_lengths_a[b] - 1][b][output_lengths_a[b] - 1];
+    }
+    return result;
+}
+
+template<typename scalar_t>
+at::Tensor
 collect_transition_grad(
         at::Tensor &aligned_transition_grad,
         at::Tensor &outputs,
@@ -211,7 +230,8 @@ collect_input_grad(
     return inputs_grad_a;
 }
 
-void force_aligned_forward(
+std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor>
+force_aligned_forward(
         at::Tensor &inputs,
         at::Tensor &outputs,
         at::Tensor &transition,
@@ -222,7 +242,31 @@ void force_aligned_forward(
         int64_t num_labels,
         int64_t batch_output_len
 ) {
+    at::Tensor aligned_inputs = MY_DISPATCH_FLOAT(make_aligned_inputs,
+                                                  inputs, outputs,
+                                                  input_lengths, output_lengths,
+                                                  batch_input_len,
+                                                  num_batches, batch_output_len);
 
+    at::Tensor aligned_transition = MY_DISPATCH_FLOAT(make_aligned_transition,
+                                                      transition, outputs,
+                                                      input_lengths, output_lengths,
+                                                      num_batches, batch_output_len);
+
+    auto alpha_result = force_aligned_alpha_recursion(aligned_inputs, aligned_transition,
+                                                      batch_input_len, num_batches, batch_output_len);
+
+    auto alpha = std::get<0>(alpha_result);
+    auto path_contrib = std::get<1>(alpha_result);
+    auto scores = MY_DISPATCH_FLOAT(collect_scores, alpha, input_lengths, output_lengths, num_batches);
+
+    bool should_roll_inputs = should_roll_to_end(input_lengths, batch_input_len);
+    auto aligned_inputs_rolled = should_roll_inputs ? roll_to_end(aligned_inputs, input_lengths) : aligned_inputs;
+    auto beta = force_aligned_beta_recursion(aligned_inputs_rolled, aligned_transition,
+                                             output_lengths, batch_input_len, num_batches, batch_output_len);
+    beta = should_roll_inputs ? roll_to_end(beta, input_lengths, true) : beta;
+
+    return {scores, alpha, beta, path_contrib};
 }
 
 void force_aligned_backward(

@@ -30,4 +30,7 @@ roll_to_end(
 
 }
 
+#define MY_DISPATCH_FLOAT(func, fst_arg, ...) \
+(fst_arg.dtype() == at::kFloat) ? func<float>(fst_arg, ##__VA_ARGS__) : func<double>(fst_arg, ##__VA_ARGS__)
+
 #endif //TORCH_ASG_UTILS_H
