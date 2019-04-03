@@ -28,7 +28,7 @@ make_aligned_inputs(
     auto input_lengths_a = input_lengths.accessor<int64_t, 1>();
     auto output_lengths_a = output_lengths.accessor<int64_t, 1>();
 
-#pragma omp parallel for schedule(dynamic, 1) collapse(3)
+#pragma omp parallel for collapse(3)
     for (int64_t b = 0; b < num_batches; ++b) {
         for (int64_t t = 0; t < input_lengths_a[b]; ++t) {
             for (int64_t s = 0; s < output_lengths_a[b]; ++s) {
@@ -56,7 +56,7 @@ make_aligned_transition(
     auto outputs_a = outputs.accessor<int64_t, 2>();
     auto output_lengths_a = output_lengths.accessor<int64_t, 1>();
 
-#pragma omp parallel for schedule(dynamic, 1) collapse(2)
+#pragma omp parallel
     for (int64_t b = 0; b < num_batches; ++b) {
         auto cur_output_len = output_lengths_a[b];
         for (int64_t s = 0; s < cur_output_len - 1; ++s) {
@@ -193,10 +193,11 @@ collect_input_grad(
     auto outputs_a = outputs.accessor<int64_t, 2>();
     auto aligned_a = aligned_input_grad.accessor<scalar_t, 3>();
 
+#pragma omp parallel collapse(2)
     for (int64_t b = 0; b < num_batches; ++b) {
-        for (int64_t s = 0; s < output_lengths_a[b]; ++s) {
-            auto label = outputs[b][s];
-            for (int64_t t = 0; t < input_lengths_a[b]; ++t) {
+        for (int64_t t = 0; t < input_lengths_a[b]; ++t) {
+            for (int64_t s = 0; s < output_lengths_a[b]; ++s) {
+                auto label = outputs[b][s];
                 inputs_grad_a[t][b][label] += aligned_a[t][b][s];
             }
         }

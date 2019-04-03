@@ -24,17 +24,28 @@ class FAC(torch.autograd.Function):
 class FCC(torch.autograd.Function):
     @staticmethod
     def forward(ctx, transition, inputs, targets, input_lengths, target_lengths, scale_mode):
-        results = torch_asg_native.fcc_loss_cpu(transition, inputs, targets, input_lengths, target_lengths, scale_mode)
-        out, alpha, alpha_max_contrib, scale = results
-        ctx.save_for_backward(transition, inputs, targets, input_lengths,
-                              target_lengths, alpha, alpha_max_contrib, scale)
-        return out
+        input_batch_len, num_batches, num_labels = inputs.shape
+        scores, alpha, beta, path_contrib = torch_asg_native.fully_connected_forward(inputs, transition, input_lengths,
+                                                                                     input_batch_len, num_batches,
+                                                                                     num_labels)
+        # forward_scores, alpha, path_contrib, should_roll = results
+        ctx.save_for_backward(alpha, beta, path_contrib)
+        # print('gamma', gamma)
+        # print('grad_input', alpha, beta)
+        # print('path_contrib', path_contrib)
+        # print('path_contrib_s', path_contrib.exp())
+        # print('path_contrib_s', path_contrib.softmax(3))
+        # print('scores', scores)
+        # print('scores from alpha', alpha[-1].logsumexp(1))
+        # print('scores from beta', (beta[0] + inputs[0]).logsumexp(1))
+        return scores
 
     @staticmethod
     def backward(ctx, grad_out):
-        transition, inputs, targets, input_lengths, target_lengths, alpha, alpha_max_contrib, scale = ctx.saved_tensors
-        results = torch_asg_native.fcc_loss_backward_cpu(grad_out, transition, inputs, targets, input_lengths,
-                                                         target_lengths, alpha, alpha_max_contrib, scale)
+        alpha, beta, path_contrib = ctx.saved_tensors
+        input_batch_len, num_batches, num_labels = alpha.shape
+        results = torch_asg_native.fully_connected_backward(grad_out, alpha, beta, path_contrib, input_batch_len, num_batches,
+                                                            num_labels)
         grad_transition, grad_inputs = results
         return grad_transition, grad_inputs, None, None, None, None, None
 

@@ -8,12 +8,12 @@ find_package(pybind11 REQUIRED)
 find_package(CUDA REQUIRED)
 
 
-pybind11_add_module(torch_asg torch_asg.cpp)
+pybind11_add_module(torch_asg fully_connected_lattice.cpp)
 
-add_library(torch_asg_cuda torch_asg_cuda.cpp torch_asg_cuda_kernel.cu fully_connected_lattice.cpp force_aligned_lattice.cpp force_aligned_lattice.h fully_connected_lattice.h force_aligned_lattice_gpu.cpp force_aligned_lattice_gpu.h fully_connected_lattice_gpu.cpp fully_connected_lattice_gpu.h)
-include_directories(torch_asg_cuda INTERFACE ../cub-1.8.0)
+#add_library(torch_asg_cuda torch_asg_cuda.cpp torch_asg_cuda_kernel.cu fully_connected_lattice.cpp force_aligned_lattice.cpp force_aligned_lattice.h fully_connected_lattice.h force_aligned_lattice_gpu.cpp force_aligned_lattice_gpu.h fully_connected_lattice_gpu.cpp fully_connected_lattice_gpu.h)
+#include_directories(torch_asg_cuda INTERFACE ../cub-1.8.0)
 
 set(PYBIND11_CPP_STANDARD -std=c++14)
 
 target_link_libraries(torch_asg PRIVATE "${TORCH_LIBRARIES}")
-target_link_libraries(torch_asg_cuda PRIVATE "${TORCH_LIBRARIES}")
+#target_link_libraries(torch_asg_cuda PRIVATE "${TORCH_LIBRARIES}")

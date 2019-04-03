@@ -7,21 +7,21 @@ except:
     raise RuntimeError('Please install pytorch>=1 first')
 
 ext_mods = [CppExtension(name='torch_asg_native',
-                         sources=['torch_asg/native/torch_asg.cpp'],
+                         sources=['torch_asg/native/fully_connected_lattice.cpp'],
                          extra_compile_args=['-fopenmp', '-Ofast'])]
 
-if True or torch.cuda.is_available():
-    ext_mods.append(CUDAExtension(name='torch_asg_cuda',
-                                  sources=['torch_asg/native/torch_asg_cuda.cpp',
-                                           'torch_asg/native/torch_asg_cuda_kernel.cu'],
-                                  extra_compile_args={
-                                      'cxx': ['-O2', ],
-                                      'nvcc': ['--gpu-architecture=sm_70', '-O3', '--use_fast_math',
-                                               '--expt-extended-lambda',
-                                               '--expt-relaxed-constexpr',
-                                               '-I./torch_asg/cub-1.8.0'
-                                               ],
-                                  }))
+# if True or torch.cuda.is_available():
+#     ext_mods.append(CUDAExtension(name='torch_asg_cuda',
+#                                   sources=['torch_asg/native/torch_asg_cuda.cpp',
+#                                            'torch_asg/native/torch_asg_cuda_kernel.cu'],
+#                                   extra_compile_args={
+#                                       'cxx': ['-O2', ],
+#                                       'nvcc': ['--gpu-architecture=sm_70', '-O3', '--use_fast_math',
+#                                                '--expt-extended-lambda',
+#                                                '--expt-relaxed-constexpr',
+#                                                '-I./torch_asg/cub-1.8.0'
+#                                                ],
+#                                   }))
 
 setup(
     name='torch_asg',
