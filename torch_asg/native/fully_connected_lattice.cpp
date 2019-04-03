@@ -1,48 +1,10 @@
 //
 // Created by amade on 4/2/2019.
 //
+#include "fully_connected_lattice.h"
 #include <omp.h>
-#include <torch/extension.h>
 
 namespace torch_asg {
-
-inline at::Tensor masked_softmax(at::Tensor &input, int64_t dim) {
-    auto output = input.softmax(dim);
-    // this is to deal with exp(-inf) / (exp(-inf) + exp(-inf)) = 0 / 0
-    // the current version of ATen somehow doesn't have at::isnan()
-    output.masked_fill_(output != output, 0);
-    return output;
-}
-
-at::Tensor
-roll_to_end(
-        at::Tensor &aligned, // inp_len, batch, xxx
-        at::Tensor &input_lengths,
-        bool to_front = false
-) {
-    AT_ASSERT(input_lengths.dtype() == at::kLong);
-    constexpr auto neg_inf = -std::numeric_limits<double>::max();
-    auto rolled = at::full_like(aligned, neg_inf);
-    auto aligned_transposed = aligned.permute({1, 0, 2});
-    auto rolled_transposed = rolled.permute({1, 0, 2});
-    auto n_batch = input_lengths.size(0);
-    auto batch_input_len = aligned.size(0);
-    auto input_lengths_a = input_lengths.accessor<int64_t, 1>();
-
-#pragma omp parallel
-    for (int64_t b = 0; b < n_batch; ++b) {
-        auto inp_len = input_lengths_a[b];
-        if (to_front) {
-            rolled_transposed[b].slice(0, 0, inp_len) =
-                    aligned_transposed[b].slice(0, batch_input_len - inp_len, batch_input_len);
-        } else {
-            rolled_transposed[b].slice(0, batch_input_len - inp_len, batch_input_len) =
-                    aligned_transposed[b].slice(0, 0, inp_len);
-        }
-    }
-    return rolled_transposed;
-}
-
 
 std::tuple<at::Tensor, at::Tensor>
 fully_connected_alpha_recursion(
@@ -100,7 +62,7 @@ fully_connected_derivative(
 ) {
     auto grad_inputs = gamma.softmax(2) * grad_out.view({1, num_batches, 1});
     auto grad_transition = (grad_inputs.slice(0, 1).view({batch_input_len - 1, num_batches, num_labels, 1}) *
-            masked_softmax(path_contrib, 3)).sum({0, 1});
+                            masked_softmax(path_contrib, 3)).sum({0, 1});
 
     return {grad_transition, grad_inputs};
 }
@@ -115,18 +77,7 @@ fully_connected_forward(
         int64_t num_labels
 ) {
 
-    bool should_roll = false;
-    if (input_lengths.dim() > 0) {
-        AT_ASSERT(input_lengths.dtype() == at::kLong)
-        AT_ASSERT(input_lengths.size(0) == num_batches)
-        auto input_lengths_a = input_lengths.accessor<int64_t, 1>();
-        for (int64_t b = 0; b < num_batches; ++b) {
-            if (input_lengths_a[b] != batch_input_len) {
-                should_roll = true;
-                break;
-            }
-        }
-    }
+    bool should_roll = should_roll_to_end(input_lengths, batch_input_len);
 
     auto alpha_results = fully_connected_alpha_recursion(inputs, transition, batch_input_len, num_batches, num_labels);
     auto alpha = std::get<0>(alpha_results);
@@ -134,9 +85,12 @@ fully_connected_forward(
 
     at::Tensor forward_scores = at::empty({num_batches}, inputs.options());
     if (should_roll) {
+
+#pragma omp parallel for
         for (int64_t b = 0; b < num_batches; ++b) {
             forward_scores[b] = alpha[input_lengths[b]][b].logsumexp(0);
         }
+
     } else {
         forward_scores.copy_(alpha[batch_input_len - 1].logsumexp(1));
     }
@@ -163,10 +117,3 @@ fully_connected_backward(
 }
 
 }
-
-#ifdef TORCH_EXTENSION_NAME
-PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
-    m.def("fully_connected_forward", &torch_asg::fully_connected_forward, "fully connected forward");
-    m.def("fully_connected_backward", &torch_asg::fully_connected_backward, "fully connected backward");
-}
-#endif

@@ -2,8 +2,9 @@
 // Created by amade on 4/2/2019.
 //
 
+#include "force_aligned_lattice.h"
+
 #include <omp.h>
-#include <torch/extension.h>
 #include <limits>
 
 namespace torch_asg {
@@ -30,9 +31,11 @@ make_aligned_inputs(
 
 #pragma omp parallel for collapse(3)
     for (int64_t b = 0; b < num_batches; ++b) {
-        for (int64_t t = 0; t < input_lengths_a[b]; ++t) {
-            for (int64_t s = 0; s < output_lengths_a[b]; ++s) {
-                aligned_a[t][b][s] = inputs_a[t][b][outputs_a[b][s]];
+        for (int64_t t = 0; t < batch_input_len; ++t) {
+            for (int64_t s = 0; s < batch_output_len; ++s) {
+                if (t < input_lengths_a[b] && s < output_lengths_a[b]) {
+                    aligned_a[t][b][s] = inputs_a[t][b][outputs_a[b][s]];
+                }
             }
         }
     }
@@ -193,12 +196,14 @@ collect_input_grad(
     auto outputs_a = outputs.accessor<int64_t, 2>();
     auto aligned_a = aligned_input_grad.accessor<scalar_t, 3>();
 
-#pragma omp parallel collapse(2)
+#pragma omp parallel for collapse(2)
     for (int64_t b = 0; b < num_batches; ++b) {
-        for (int64_t t = 0; t < input_lengths_a[b]; ++t) {
-            for (int64_t s = 0; s < output_lengths_a[b]; ++s) {
-                auto label = outputs[b][s];
-                inputs_grad_a[t][b][label] += aligned_a[t][b][s];
+        for (int64_t t = 0; t < batch_input_len; ++t) {
+            if (t < input_lengths_a[b]) {
+                for (int64_t s = 0; s < output_lengths_a[b]; ++s) {
+                    auto label = outputs[b][s];
+                    inputs_grad_a[t][b][label] += aligned_a[t][b][s];
+                }
             }
         }
     }
@@ -207,13 +212,23 @@ collect_input_grad(
 }
 
 void force_aligned_forward(
-
+        at::Tensor &inputs,
+        at::Tensor &outputs,
+        at::Tensor &transition,
+        at::Tensor &input_lengths,
+        at::Tensor &output_lengths,
+        int64_t batch_input_len,
+        int64_t num_batches,
+        int64_t num_labels,
+        int64_t batch_output_len
 ) {
 
 }
 
 void force_aligned_backward(
-
+        at::Tensor &alpha,
+        at::Tensor &beta,
+        at::Tensor &path_contrib
 ) {
 
 }

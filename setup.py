@@ -7,7 +7,10 @@ except:
     raise RuntimeError('Please install pytorch>=1 first')
 
 ext_mods = [CppExtension(name='torch_asg_native',
-                         sources=['torch_asg/native/fully_connected_lattice.cpp'],
+                         sources=['torch_asg/native/utils.cpp',
+                                  'torch_asg/native/force_aligned_lattice.cpp',
+                                  'torch_asg/native/fully_connected_lattice.cpp',
+                                  'torch_asg/native/extension.cpp'],
                          extra_compile_args=['-fopenmp', '-Ofast'])]
 
 # if True or torch.cuda.is_available():
