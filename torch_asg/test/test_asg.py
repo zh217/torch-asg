@@ -129,11 +129,11 @@ def test_fac_1():
     results = FAC.apply(transition, inputs, targets, torch.LongTensor([T, T]), torch.LongTensor([S, S]), 'none')
     expected = torch.logsumexp(torch.tensor([[1.5, 2.5], [2., 3.]]), dim=-1)
     assert (results - expected).abs().sum() < EPSILON, results.abs().sum()
-    # gradcheck(
-    #     lambda inp, trans: FAC.apply(trans, inp, targets, torch.LongTensor([T, T]), torch.LongTensor([S, S]),
-    #                                  'none').sum(),
-    #     (inputs.clone().detach().requires_grad_(True),
-    #      transition.clone().detach().requires_grad_(True)))
+    gradcheck(
+        lambda inp, trans: FAC.apply(trans, inp, targets, torch.LongTensor([T, T]), torch.LongTensor([S, S]),
+                                     'none').sum(),
+        (inputs.clone().detach().requires_grad_(True),
+         transition.clone().detach().requires_grad_(True)))
 
 
 def test_fac_2():
@@ -149,10 +149,10 @@ def test_fac_2():
     results = FAC.apply(transition, inputs, targets, torch.LongTensor([T]), torch.LongTensor([S]), 'none')
     expected = -torch.log(torch.tensor(32.))
     assert (results - expected).abs().sum() < EPSILON, results.abs().sum()
-    # gradcheck(
-    #     lambda inp, trans: FAC.apply(trans, inp, targets, torch.LongTensor([T]), torch.LongTensor([S]), 'none').sum(),
-    #     (inputs.clone().detach().requires_grad_(True),
-    #      transition.clone().detach().requires_grad_(True)))
+    gradcheck(
+        lambda inp, trans: FAC.apply(trans, inp, targets, torch.LongTensor([T]), torch.LongTensor([S]), 'none').sum(),
+        (inputs.clone().detach().requires_grad_(True),
+         transition.clone().detach().requires_grad_(True)))
 
 
 def test_fac_grad():
@@ -167,6 +167,10 @@ def test_fac_grad():
                             [1, 0, 0], ])
     transition = torch.empty((N, N)).uniform_()
 
+    # FAC.apply(transition, inputs, targets[:B], torch.LongTensor([T] * B)[:B],
+    #           torch.LongTensor([3, 2, 1][:B]),
+    #           'target_size_sqrt').sum()
+
     def f(inputs, transition):
         return FAC.apply(transition, inputs, targets[:B], torch.LongTensor([T] * B)[:B],
                          torch.LongTensor([3, 2, 1][:B]),
@@ -174,7 +178,7 @@ def test_fac_grad():
 
     gradcheck(f,
               (inputs[:, :B].clone().detach().requires_grad_(True),
-               transition.clone().detach().requires_grad_(False)))
+               transition.clone().detach().requires_grad_(True)))
 
 
 def test_asg_1():

@@ -21,7 +21,7 @@ make_aligned_inputs(
         int64_t num_batches,
         int64_t batch_output_len
 ) {
-    constexpr auto neg_inf = -std::numeric_limits<scalar_t>::max();
+    constexpr auto neg_inf = -std::numeric_limits<scalar_t>::infinity();
     at::Tensor aligned = at::full({batch_input_len, num_batches, batch_output_len}, neg_inf, inputs.options());
     auto aligned_a = aligned.accessor<scalar_t, 3>();
     auto inputs_a = inputs.accessor<scalar_t, 3>();
@@ -52,14 +52,14 @@ make_aligned_transition(
         int64_t num_batches,
         int64_t batch_output_len
 ) {
-//    constexpr auto neg_inf = -std::numeric_limits<scalar_t>::max();
+//    constexpr auto neg_inf = -std::numeric_limits<scalar_t>::infinity();
     at::Tensor aligned = at::empty({2, num_batches, batch_output_len}, transition.options());
     auto transition_a = transition.accessor<scalar_t, 2>();
     auto aligned_a = aligned.accessor<scalar_t, 3>();
     auto outputs_a = outputs.accessor<int64_t, 2>();
     auto output_lengths_a = output_lengths.accessor<int64_t, 1>();
 
-#pragma omp parallel
+#pragma omp parallel for
     for (int64_t b = 0; b < num_batches; ++b) {
         auto cur_output_len = output_lengths_a[b];
         for (int64_t s = 0; s < cur_output_len - 1; ++s) {
@@ -82,7 +82,7 @@ force_aligned_alpha_recursion(
         int64_t num_batches,
         int64_t batch_output_len
 ) {
-    constexpr auto neg_inf = -std::numeric_limits<double>::max();
+    constexpr auto neg_inf = -std::numeric_limits<double>::infinity();
 
     auto alpha = aligned_inputs.clone().detach();
 
@@ -94,10 +94,11 @@ force_aligned_alpha_recursion(
                                    2,
                                    num_batches,
                                    batch_output_len - 1}, aligned_inputs.options());
-    auto self_transition = aligned_transition[0];
-    auto next_transition = aligned_transition[1];
+    auto self_transition = aligned_transition[0]; // num_batches, batch_output_len
+    auto next_transition = aligned_transition[1]; // num_batches, batch_output_len
 
-    alpha_inv_idx[0].slice(1, 1) += self_transition.permute({1, 0})[0].view({1, num_batches});
+    alpha_inv_idx[0].slice(1, 1) += self_transition.permute({1, 0})[0].view({num_batches, 1});
+
     alpha_inv_idx[0] = alpha_inv_idx[0].cumsum(1);
 
     auto alpha_no_top = alpha.slice(2, 1, batch_output_len);
@@ -121,7 +122,7 @@ force_aligned_beta_recursion(
         int64_t num_batches,
         int64_t batch_output_len
 ) {
-    constexpr auto neg_inf = -std::numeric_limits<double>::max();
+    constexpr auto neg_inf = -std::numeric_limits<double>::infinity();
 
     at::Tensor beta = at::full_like(aligned_inputs, neg_inf); // input_len, batch, output_len
 
@@ -152,7 +153,7 @@ force_aligned_beta_recursion(
                 {self_transition.slice(1, 0, batch_output_len - 1)
                  + aligned_inputs[t + 1].slice(1, 0, batch_output_len - 1)
                  + beta_no_bottom[t + 1],
-                 next_transition.slice(1, 1, batch_output_len)
+                 next_transition.slice(1, 0, batch_output_len - 1)
                  + aligned_inputs[t + 1].slice(1, 1, batch_output_len)
                  + beta_no_top[t + 1]},
                 0).logsumexp(0);
@@ -161,14 +162,33 @@ force_aligned_beta_recursion(
     return beta;
 }
 
-std::tuple<at::Tensor, at::Tensor, at::Tensor>
+std::tuple<at::Tensor, at::Tensor>
 force_aligned_derivative(
-        at::Tensor &grad_out,
-        at::Tensor &gamma,
-        int64_t num_batches
+        at::Tensor &grad_out, // num_batches
+        at::Tensor &gamma, // batch_input_len, num_batches, batch_output_len
+        at::Tensor &path_contrib, // batch_input_len - 1, 2, num_batches, batch_output_len - 1
+        int64_t num_batches,
+        int64_t batch_output_len
 ) {
-    auto grad_aligned_inputs = gamma.softmax(2) * grad_out.view({1, num_batches, 1});
-    return {grad_out, grad_out, grad_out};
+    auto aligned_inputs_grad = gamma.softmax(2) * grad_out.view({1, num_batches, 1});
+    auto path_factor = path_contrib.softmax(1).permute(
+            {1, 0, 2, 3}); // <<2>>, batch_input_len - 1, num_batches, batch_output_len - 1
+    auto hori_factor = path_factor[0]; // batch_input_len - 1, num_batches, batch_output_len - 1
+    auto diag_factor = path_factor[1]; // batch_input_len - 1, num_batches, batch_output_len - 1
+
+    at::Tensor aligned_transition_grad = at::empty({2, num_batches, batch_output_len}, gamma.options());
+    auto self_trans_grad = aligned_transition_grad[0];
+    auto next_trans_grad = aligned_transition_grad[1];
+
+
+    self_trans_grad.permute({1, 0})[0] = aligned_inputs_grad.permute({2, 0, 1})[0].slice(0, 1).sum(0);
+
+    auto state_factor = aligned_inputs_grad.slice(0, 1).slice(2, 1);
+
+    self_trans_grad.slice(1, 1) = (state_factor * hori_factor).sum(0);
+    next_trans_grad.slice(1, 0, batch_output_len - 1) = (state_factor * diag_factor).sum(0);
+
+    return {aligned_inputs_grad, aligned_transition_grad};
 }
 
 template<typename scalar_t>
@@ -213,7 +233,7 @@ collect_transition_grad(
             transition_grad_a[cur][cur] += aligned_a[0][b][s];
             transition_grad_a[nxt][cur] += aligned_a[1][b][s];
         }
-        auto last = outputs_a[cur_output_len - 1];
+        auto last = outputs_a[b][cur_output_len - 1];
         transition_grad_a[last][last] += aligned_a[0][b][cur_output_len - 1];
     }
     return transition_grad;
@@ -227,8 +247,8 @@ collect_input_grad(
         at::Tensor &outputs,
         at::Tensor &input_lengths,
         at::Tensor &output_lengths,
-        int64_t num_batches,
         int64_t batch_input_len,
+        int64_t num_batches,
         int64_t num_labels
 ) {
     at::Tensor inputs_grad = at::zeros({batch_input_len, num_batches, num_labels}, aligned_input_grad.options());
@@ -243,14 +263,14 @@ collect_input_grad(
         for (int64_t t = 0; t < batch_input_len; ++t) {
             if (t < input_lengths_a[b]) {
                 for (int64_t s = 0; s < output_lengths_a[b]; ++s) {
-                    auto label = outputs[b][s];
+                    auto label = outputs_a[b][s];
                     inputs_grad_a[t][b][label] += aligned_a[t][b][s];
                 }
             }
         }
     }
 
-    return inputs_grad_a;
+    return inputs_grad;
 }
 
 std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor>
@@ -294,13 +314,32 @@ force_aligned_forward(
     return {scores, alpha, beta, path_contrib};
 }
 
-void force_aligned_backward(
+std::tuple<at::Tensor, at::Tensor>
+force_aligned_backward(
         at::Tensor &grad_out,
         at::Tensor &alpha,
         at::Tensor &beta,
-        at::Tensor &path_contrib
+        at::Tensor &path_contrib,
+        at::Tensor &outputs,
+        at::Tensor &input_lengths,
+        at::Tensor &output_lengths,
+        int64_t batch_input_len,
+        int64_t num_batches,
+        int64_t num_labels,
+        int64_t batch_output_len
 ) {
+    auto gamma = alpha + beta;
+    auto grad_results = force_aligned_derivative(grad_out, gamma, path_contrib, num_batches, batch_output_len);
+    auto aligned_inputs_grad = std::get<0>(grad_results);
+    auto aligned_transition_grad = std::get<1>(grad_results);
 
+    auto inputs_grad = MY_DISPATCH_FLOAT(collect_input_grad,
+                                         aligned_inputs_grad, outputs, input_lengths, output_lengths,
+                                         batch_input_len, num_batches, num_labels);
+    auto transition_grad = MY_DISPATCH_FLOAT(collect_transition_grad,
+                                             aligned_transition_grad, outputs,
+                                             output_lengths, num_batches, num_labels);
+    return {transition_grad, inputs_grad};
 }
 
 }

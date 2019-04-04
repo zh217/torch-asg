@@ -230,7 +230,7 @@ Similar to the fully connected case, we define
 \end{align}
 and also
 \begin{align}
-\bar\beta^{T-1}_{b,S-1} &= \bar{W}^{\mathbf{f}}_{b,S-1} =1 \\
+\bar\beta^{T-1}_{b,S-1} &= \bar{W}^{\mathbf{f}}_{b,S-1} =0 \\
 \bar\beta^{T-1}_{bs} &= \bar{W}^{\mathbf{f}}_{bs} =-\infty && s<S-1\\
 \bar\beta^t_{b,S-1} &= \bar{U}^{t}_{b,S-1}\otimes\bar\beta^{t+1}_{b,S-1} 
 \\
@@ -263,12 +263,14 @@ note that this is $0$ if $\bar\gamma^t_{bs}=-\infty$, so inaccessible states do 
 \end{align}
 therefore,
 \begin{align}
+\Delta\bar{H}_{b0}&\equiv\frac{\partial S^b_{\rm{aligned}}}{\partial\bar{H}_{b0}}
+=\sum_{t=1}^{T-1}\Delta\bar I_{tb0}\\
 \Delta\bar{H}_{bs}&\equiv\frac{\partial S^b_{\rm{aligned}}}{\partial\bar{H}_{bs}}
-=\sum_{t=1}^{T-1}\sum_{s=0}^{S-1}\frac{\partial S^b_{\rm{aligned}}}{\partial\bar\alpha^t_{bs}}\frac{\partial\bar\alpha^t_{bs}}{\partial\bar U^{t-1}_{bs}}\\
-&=\sum_{t=1}^{T-1}\left(\Delta\bar I_{tb0}+\sum_{s=1}^{S-1}\Delta\bar I_{tbs}\frac{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b,s-1}}}\right)\\
+=\sum_{t=1}^{T-1}\frac{\partial S^b_{\rm{aligned}}}{\partial\bar\alpha^t_{bs}}\frac{\partial\bar\alpha^t_{bs}}{\partial\bar U^{t-1}_{bs}}\\
+&=\sum_{t=1}^{T-1}\Delta\bar I_{tbs}\frac{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b,s-1}}}\\
 \Delta\bar{D}_{bs}&\equiv\frac{\partial S^b_{\rm{aligned}}}{\partial\bar{D}_{bs}}
-=\sum_{t=1}^{T-1}\sum_{s=1}^{S-1}\frac{\partial S^b_{\rm{aligned}}}{\partial\bar\alpha^t_{bs}}\frac{\partial\bar\alpha^t_{bs}}{\partial\bar V^{t-1}_{b,s-1}}\\
-&=\sum_{t=1}^{T-1}\sum_{s=1}^{S-1}\Delta\bar I_{tbs}\frac{e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b,s-1}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b,s-1}}}.
+=\sum_{t=1}^{T-1}\frac{\partial S^b_{\rm{aligned}}}{\partial\bar\alpha^t_{bs}}\frac{\partial\bar\alpha^t_{bs}}{\partial\bar V^{t-1}_{b,s-1}}\\
+&=\sum_{t=1}^{T-1}\Delta\bar I_{tbs}\frac{e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b,s-1}}}{e^{\bar{H}_{bs}+\bar\alpha^{t-1}_{bs}} + e^{\bar{D}_{b,s-1}+\bar\alpha^{t-1}_{b,s-1}}}.
 \end{align}
 What we actually want, however, is derivatives with respect to the original inputs $I_{tbi}$ and $T_{ij}$. We have
 \begin{align}

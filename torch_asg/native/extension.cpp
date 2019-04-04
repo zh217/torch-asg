@@ -9,5 +9,6 @@ PYBIND11_MODULE(TORCH_EXTENSION_NAME, m) {
     m.def("fully_connected_forward", &torch_asg::fully_connected_forward, "fully-connected forward");
     m.def("fully_connected_backward", &torch_asg::fully_connected_backward, "fully-connected backward");
     m.def("force_aligned_forward", &torch_asg::force_aligned_forward, "force-aligned forward");
+    m.def("force_aligned_backward", &torch_asg::force_aligned_backward, "force-aligned backward");
 }
 #endif

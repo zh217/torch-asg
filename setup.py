@@ -12,7 +12,7 @@ ext_mods = [CppExtension(name='torch_asg_native',
                                   'torch_asg/native/fully_connected_lattice.cpp',
                                   'torch_asg/native/extension.cpp'],
                          # extra_compile_args=['-fopenmp', '-Ofast']
-                         extra_compile_args=['-O0', '-g']
+                         extra_compile_args=['-fopenmp', '-O0', '-g']
                          )]
 
 # if True or torch.cuda.is_available():

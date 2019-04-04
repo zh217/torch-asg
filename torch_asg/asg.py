@@ -19,16 +19,21 @@ class FAC(torch.autograd.Function):
                                                          num_labels,
                                                          batch_output_len)
         scores, alpha, beta, path_contrib = results
-        print('path_contrib', path_contrib.permute(2, 1, 3, 0))
-        print('alpha', alpha.permute(1, 2, 0))
-        ctx.save_for_backward(alpha, beta, path_contrib)
+        # print('alpha', alpha)
+        # print('beta', beta)
+        # print('path_contrib', path_contrib.permute(2, 1, 3, 0))
+        # print('beta', beta.permute(1, 2, 0))
+        ctx.save_for_backward(alpha, beta, path_contrib, targets, input_lengths, target_lengths, transition)
         return scores
 
     @staticmethod
     def backward(ctx, grad_out):
-        inputs, targets, input_lengths, target_lengths, alpha, scale, self_trans, next_trans = ctx.saved_tensors
-        results = torch_asg_native.fac_loss_backward_cpu(grad_out, inputs, targets, input_lengths, target_lengths,
-                                                         alpha, scale, self_trans, next_trans)
+        alpha, beta, path_contrib, targets, input_lengths, target_lengths, transition = ctx.saved_tensors
+        batch_input_len, num_batches, batch_output_len = alpha.shape
+        num_labels, _ = transition.shape
+        results = torch_asg_native.force_aligned_backward(grad_out, alpha, beta, path_contrib,
+                                                          targets, input_lengths, target_lengths,
+                                                          batch_input_len, num_batches, num_labels, batch_output_len)
         grad_transition, grad_inputs = results
         return grad_transition, grad_inputs, None, None, None, None, None
 

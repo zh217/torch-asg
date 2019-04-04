@@ -9,6 +9,7 @@
 
 namespace torch_asg {
 
+
 std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor>
 force_aligned_forward(
         at::Tensor &inputs,
@@ -21,6 +22,23 @@ force_aligned_forward(
         int64_t num_labels,
         int64_t batch_output_len
 );
+
+
+std::tuple<at::Tensor, at::Tensor>
+force_aligned_backward(
+        at::Tensor &grad_out,
+        at::Tensor &alpha,
+        at::Tensor &beta,
+        at::Tensor &path_contrib,
+        at::Tensor &outputs,
+        at::Tensor &input_lengths,
+        at::Tensor &output_lengths,
+        int64_t batch_input_len,
+        int64_t num_batches,
+        int64_t num_labels,
+        int64_t batch_output_len
+);
+
 
 }
 

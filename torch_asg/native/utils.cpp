@@ -10,7 +10,7 @@ namespace torch_asg {
 
 at::Tensor
 masked_softmax(at::Tensor &input, int64_t dim) {
-//    constexpr auto neg_inf = -std::numeric_limits<double>::max();
+//    constexpr auto neg_inf = -std::numeric_limits<double>::infinity();
     auto output = input.softmax(dim);
     // this is to deal with exp(-inf) / (exp(-inf) + exp(-inf)) = 0 / 0
     // the current version of ATen somehow doesn't have at::isnan()
@@ -44,7 +44,7 @@ roll_to_end(
         bool to_front
 ) {
     AT_ASSERT(input_lengths.dtype() == at::kLong);
-    constexpr auto neg_inf = -std::numeric_limits<double>::max();
+    constexpr auto neg_inf = -std::numeric_limits<double>::infinity();
     auto rolled = at::full_like(aligned, neg_inf);
     auto aligned_transposed = aligned.permute({1, 0, 2});
     auto rolled_transposed = rolled.permute({1, 0, 2});
