@@ -85,7 +85,10 @@ force_aligned_alpha_recursion(
     auto alpha = aligned_inputs.clone().detach();
     auto alpha_inv_idx = alpha.permute({2, 1, 0});
     auto aligned_inputs_inv_idx = aligned_inputs.permute({2, 1, 0});
-    auto path_contrib = at::empty({batch_input_len, 2, num_batches, batch_output_len}, aligned_inputs.options());
+    auto path_contrib = at::empty({batch_input_len - 1,
+                                   2,
+                                   num_batches,
+                                   batch_output_len - 1}, aligned_inputs.options());
     auto path_self_contrib = path_contrib.permute({1, 0, 2, 3})[0];
     auto path_next_contrib = path_contrib.permute({1, 0, 2, 3})[1];
     auto self_transition = aligned_transition[0];
@@ -98,9 +101,9 @@ force_aligned_alpha_recursion(
     auto alpha_no_bottom = alpha.slice(2, 0, batch_output_len - 1);
 
     for (int64_t t = 1; t < batch_input_len; ++t) {
-        path_self_contrib[t] = alpha_no_top[t - 1] + self_transition;
-        path_next_contrib[t] = alpha_no_bottom[t - 1] + next_transition;
-        alpha_no_top[t] += path_contrib[t].logsumexp(1);
+        path_self_contrib[t - 1] = alpha_no_top[t - 1] + self_transition;
+        path_next_contrib[t - 1] = alpha_no_bottom[t - 1] + next_transition;
+        alpha_no_top[t] += path_contrib[t - 1].logsumexp(1);
     }
 
     return {alpha, path_contrib};
@@ -146,6 +149,16 @@ force_aligned_beta_recursion(
     }
 
     return beta;
+}
+
+std::tuple<at::Tensor, at::Tensor, at::Tensor>
+force_aligned_derivative(
+        at::Tensor &grad_out,
+        at::Tensor &gamma,
+        int64_t num_batches
+) {
+    auto grad_aligned_inputs = gamma.softmax(2) * grad_out.view({1, num_batches, 1});
+    return {};
 }
 
 template<typename scalar_t>
@@ -270,6 +283,7 @@ force_aligned_forward(
 }
 
 void force_aligned_backward(
+        at::Tensor &grad_out,
         at::Tensor &alpha,
         at::Tensor &beta,
         at::Tensor &path_contrib
