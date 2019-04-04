@@ -5,7 +5,8 @@ from torch_asg import ASGLoss
 from torch_asg.asg import FCC, FAC
 
 
-@pytest.mark.skip()
+# @pytest.mark.skip()
+# FIXME
 def test_run():
     num_labels = 7
     input_batch_len = 6

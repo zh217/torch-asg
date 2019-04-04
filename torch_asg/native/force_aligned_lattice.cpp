@@ -171,7 +171,7 @@ force_aligned_derivative(
         int64_t batch_output_len
 ) {
     auto aligned_inputs_grad = gamma.softmax(2) * grad_out.view({1, num_batches, 1});
-    auto path_factor = path_contrib.softmax(1).permute(
+    auto path_factor = masked_softmax(path_contrib, 1).permute(
             {1, 0, 2, 3}); // <<2>>, batch_input_len - 1, num_batches, batch_output_len - 1
     auto hori_factor = path_factor[0]; // batch_input_len - 1, num_batches, batch_output_len - 1
     auto diag_factor = path_factor[1]; // batch_input_len - 1, num_batches, batch_output_len - 1

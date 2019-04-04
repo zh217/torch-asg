@@ -9,6 +9,10 @@ class FAC(torch.autograd.Function):
     def forward(ctx, transition, inputs, targets, input_lengths, target_lengths, scale_mode):
         batch_input_len, num_batches, num_labels = inputs.shape
         _, batch_output_len = targets.shape
+        if batch_output_len > batch_input_len:
+            batch_output_len = batch_input_len
+            targets = targets[:, :batch_output_len]
+            target_lengths = torch.min(target_lengths, other=target_lengths.new_tensor([batch_output_len]))
         results = torch_asg_native.force_aligned_forward(inputs,
                                                          targets,
                                                          transition,
