@@ -7,10 +7,22 @@ import torch_asg_native
 class FAC(torch.autograd.Function):
     @staticmethod
     def forward(ctx, transition, inputs, targets, input_lengths, target_lengths, scale_mode):
-        results = torch_asg_native.fac_loss_cpu(transition, inputs, targets, input_lengths, target_lengths, scale_mode)
-        out, alpha, scale, self_trans, next_trans = results
-        ctx.save_for_backward(inputs, targets, input_lengths, target_lengths, alpha, scale, self_trans, next_trans)
-        return out
+        batch_input_len, num_batches, num_labels = inputs.shape
+        _, batch_output_len = targets.shape
+        results = torch_asg_native.force_aligned_forward(inputs,
+                                                         targets,
+                                                         transition,
+                                                         input_lengths,
+                                                         target_lengths,
+                                                         batch_input_len,
+                                                         num_batches,
+                                                         num_labels,
+                                                         batch_output_len)
+        scores, alpha, beta, path_contrib = results
+        print('path_contrib', path_contrib.permute(2, 1, 3, 0))
+        print('alpha', alpha.permute(1, 2, 0))
+        ctx.save_for_backward(alpha, beta, path_contrib)
+        return scores
 
     @staticmethod
     def backward(ctx, grad_out):
@@ -44,7 +56,8 @@ class FCC(torch.autograd.Function):
     def backward(ctx, grad_out):
         alpha, beta, path_contrib = ctx.saved_tensors
         input_batch_len, num_batches, num_labels = alpha.shape
-        results = torch_asg_native.fully_connected_backward(grad_out, alpha, beta, path_contrib, input_batch_len, num_batches,
+        results = torch_asg_native.fully_connected_backward(grad_out, alpha, beta, path_contrib, input_batch_len,
+                                                            num_batches,
                                                             num_labels)
         grad_transition, grad_inputs = results
         return grad_transition, grad_inputs, None, None, None, None, None
