@@ -125,53 +125,38 @@ force_aligned_beta_recursion(
 
     at::Tensor beta = at::full_like(aligned_inputs, neg_inf); // input_len, batch, output_len
 
-    std::cout << "A";
-
     auto self_transition = aligned_transition[0]; // batch, output_len
     auto next_transition = aligned_transition[1]; // batch, output_len
 
-    std::cout << "B";
-
     for (int64_t b = 0; b < num_batches; ++b) {
-        beta[batch_input_len - 1][b][output_lengths[b] - 1] = 1;
+        beta[batch_input_len - 1][b][output_lengths[b] - 1] = 0;
     }
-
-    std::cout << "C";
 
     auto beta_last_row = aligned_inputs.permute({2, 0, 1})[batch_output_len - 1].slice(0, 1, batch_input_len)
                          // ^^ input_len, batch, remove input_len = 0
                          // vv output_len, batch -> batch -> 1, batch
-                         + self_transition.permute({1, 0})[batch_input_len - 2].view({1, num_batches});
-    std::cout << "Cx";
-    beta_last_row = beta_last_row.flip(1);
-    std::cout << "Cy";
-    beta_last_row = beta_last_row.cumsum(1);
-    std::cout << "Cz";
-    beta_last_row = beta_last_row.flip(1);
+                         + self_transition.permute({1, 0})[batch_output_len - 1].view({1, num_batches});
 
-    std::cout << "C1";
+    beta_last_row = beta_last_row.flip(0);
+    beta_last_row = beta_last_row.cumsum(0);
+    beta_last_row = beta_last_row.flip(0);
+
     // output_len, input_len, batch -> input_len, batch -> remove last idx
     beta.permute({2, 0, 1})[batch_output_len - 1].slice(0, 0, batch_input_len - 1) = beta_last_row;
 
-    std::cout << "D";
-
     auto beta_no_top = beta.slice(2, 1, batch_output_len);
     auto beta_no_bottom = beta.slice(2, 0, batch_output_len - 1);
-
-    std::cout << "E";
 
     for (int64_t t = batch_input_len - 2; t >= 0; --t) {
         beta_no_bottom[t] = at::stack(
                 {self_transition.slice(1, 0, batch_output_len - 1)
                  + aligned_inputs[t + 1].slice(1, 0, batch_output_len - 1)
                  + beta_no_bottom[t + 1],
-                 next_transition.slice(1, 0, batch_output_len - 1)
+                 next_transition.slice(1, 1, batch_output_len)
                  + aligned_inputs[t + 1].slice(1, 1, batch_output_len)
                  + beta_no_top[t + 1]},
                 0).logsumexp(0);
     }
-
-    std::cout << "F";
 
     return beta;
 }
@@ -296,13 +281,15 @@ force_aligned_forward(
 
     auto alpha = std::get<0>(alpha_result);
     auto path_contrib = std::get<1>(alpha_result);
-    auto scores = MY_DISPATCH_FLOAT(collect_scores, alpha, input_lengths, output_lengths, num_batches);
 
     bool should_roll_inputs = should_roll_to_end(input_lengths, batch_input_len);
     auto aligned_inputs_rolled = should_roll_inputs ? roll_to_end(aligned_inputs, input_lengths) : aligned_inputs;
     auto beta = force_aligned_beta_recursion(aligned_inputs_rolled, aligned_transition,
                                              output_lengths, batch_input_len, num_batches, batch_output_len);
     beta = should_roll_inputs ? roll_to_end(beta, input_lengths, true) : beta;
+
+//    auto scores = MY_DISPATCH_FLOAT(collect_scores, alpha, input_lengths, output_lengths, num_batches);
+    auto scores = beta[0].permute({1, 0})[0] + aligned_inputs[0].permute({1, 0})[0];
 
     return {scores, alpha, beta, path_contrib};
 }
