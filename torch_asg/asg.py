@@ -9,6 +9,10 @@ class FAC(torch.autograd.Function):
     def forward(ctx, transition, inputs, targets, input_lengths, target_lengths, scale_mode):
         batch_input_len, num_batches, num_labels = inputs.shape
         _, batch_output_len = targets.shape
+        if input_lengths is None:
+            input_lengths = torch.LongTensor([batch_input_len] * num_batches)
+        if target_lengths is None:
+            target_lengths = torch.LongTensor([batch_output_len] * num_batches)
         if batch_output_len > batch_input_len:
             batch_output_len = batch_input_len
             targets = targets[:, :batch_output_len]
@@ -46,6 +50,8 @@ class FCC(torch.autograd.Function):
     @staticmethod
     def forward(ctx, transition, inputs, targets, input_lengths, target_lengths, scale_mode):
         input_batch_len, num_batches, num_labels = inputs.shape
+        if input_lengths is None:
+            input_lengths = torch.LongTensor([input_batch_len] * num_batches)
         scores, alpha, beta, path_contrib = torch_asg_native.fully_connected_forward(inputs, transition, input_lengths,
                                                                                      input_batch_len, num_batches,
                                                                                      num_labels)

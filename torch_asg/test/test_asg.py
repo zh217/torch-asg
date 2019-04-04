@@ -5,8 +5,7 @@ from torch_asg import ASGLoss
 from torch_asg.asg import FCC, FAC
 
 
-# @pytest.mark.skip()
-# FIXME
+@pytest.mark.skip()
 def test_run():
     num_labels = 7
     input_batch_len = 6
@@ -16,12 +15,13 @@ def test_run():
                        reduction='mean',  # mean (default), sum, none
                        scale_mode='none'  # none (default), input_size, input_size_sqrt, target_size, target_size_sqrt
                        )
+    asg_loss.transition.data.uniform_()
     for i in range(1):
         inputs = torch.randn(input_batch_len, num_batches, num_labels, requires_grad=True)
         targets = torch.randint(0, num_labels, (num_batches, target_batch_len))
         input_lengths = torch.randint(1, input_batch_len + 1, (num_batches,))
         target_lengths = torch.randint(1, target_batch_len + 1, (num_batches,))
-        loss = asg_loss.forward(inputs, targets, input_lengths, target_lengths)
+        loss = asg_loss.forward(inputs, targets, None and input_lengths, None and target_lengths)
         print('loss', loss)
         # You can get the transition matrix if you need it.
         # transition[i, j] is transition score from label j to label i.
@@ -108,6 +108,35 @@ def test_fcc_grad():
     gradcheck(f,
               (inputs.clone().detach().requires_grad_(True),
                transition.clone().detach().requires_grad_(True)))
+
+
+def test_fcc_grad2():
+    torch.set_default_dtype(torch.float64)
+    num_labels = 7
+    input_batch_len = 6
+    num_batches = 2
+    target_batch_len = 5
+    for i in range(1):
+        inputs = torch.randn(input_batch_len, num_batches, num_labels, requires_grad=True)
+        targets = torch.randint(0, num_labels, (num_batches, target_batch_len))
+        transition = torch.empty((num_labels, num_labels)).uniform_()
+        input_lengths = torch.randint(1, input_batch_len + 1, (num_batches,))
+        target_lengths = torch.randint(1, target_batch_len + 1, (num_batches,))
+
+        # r = FCC.apply(transition, inputs, targets,
+        #               input_lengths, target_lengths,
+        #               'target_size_sqrt').sum()
+        # print(r)
+        # r.backward()
+
+        def f(inputs, transition):
+            return FCC.apply(transition, inputs, targets,
+                             input_lengths, target_lengths,
+                             'target_size_sqrt').sum()
+
+        gradcheck(f,
+                  (inputs.clone().detach().requires_grad_(True),
+                   transition.clone().detach().requires_grad_(True)))
 
 
 def test_fac_1():

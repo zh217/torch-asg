@@ -2,7 +2,7 @@
 // Created by amade on 4/2/2019.
 //
 #include "fully_connected_lattice.h"
-#include <omp.h>
+//#include <omp.h>
 
 namespace torch_asg {
 
@@ -14,9 +14,12 @@ fully_connected_alpha_recursion(
         int64_t num_batches,
         int64_t num_labels
 ) {
+    constexpr auto neg_inf = -std::numeric_limits<double>::infinity();
     auto transition_e = transition.view({1, num_labels, num_labels}).contiguous();
-    auto alpha = at::empty({batch_input_len, num_batches, num_labels}, inputs.options());
-    auto path_contrib = at::empty({batch_input_len - 1, num_batches, num_labels, num_labels}, inputs.options());
+    auto alpha = at::full({batch_input_len, num_batches, num_labels}, neg_inf,
+                          inputs.options().requires_grad(false));
+    auto path_contrib = at::zeros({batch_input_len - 1, num_batches, num_labels, num_labels},
+                                  inputs.options().requires_grad(false));
 
     alpha[0] = inputs[0];
 
@@ -39,8 +42,9 @@ fully_connected_beta_recursion(
         int64_t num_batches,
         int64_t num_labels
 ) {
+    constexpr auto neg_inf = -std::numeric_limits<double>::infinity();
     auto transition_t = transition.t().view({1, num_labels, num_labels}).contiguous();
-    auto beta = at::empty({batch_input_len, num_batches, num_labels}, inputs.options());
+    auto beta = at::full({batch_input_len, num_batches, num_labels}, neg_inf, inputs.options().requires_grad(false));
 
     beta[batch_input_len - 1].fill_(0);
 
@@ -60,7 +64,7 @@ fully_connected_derivative(
         int64_t num_batches,
         int64_t num_labels
 ) {
-    auto grad_inputs = gamma.softmax(2) * grad_out.view({1, num_batches, 1});
+    auto grad_inputs = masked_softmax(gamma, 2) * grad_out.view({1, num_batches, 1});
     auto grad_transition = (grad_inputs.slice(0, 1).view({batch_input_len - 1, num_batches, num_labels, 1}) *
                             masked_softmax(path_contrib, 3)).sum({0, 1});
 
@@ -83,22 +87,21 @@ fully_connected_forward(
     auto alpha = std::get<0>(alpha_results);
     auto path_contrib = std::get<1>(alpha_results);
 
-    at::Tensor forward_scores = at::empty({num_batches}, inputs.options());
-    if (should_roll) {
-
-#pragma omp parallel for
-        for (int64_t b = 0; b < num_batches; ++b) {
-            forward_scores[b] = alpha[input_lengths[b]][b].logsumexp(0);
-        }
-
-    } else {
-        forward_scores.copy_(alpha[batch_input_len - 1].logsumexp(1));
-    }
+//    at::Tensor forward_scores = at::zeros({num_batches}, inputs.options());
+//    if (should_roll) {
+//
+//        for (int64_t b = 0; b < num_batches; ++b) {
+//            forward_scores[b] = alpha[input_lengths[b] - 1][b].logsumexp(0);
+//        }
+//
+//    } else {
+//        forward_scores.copy_(alpha[batch_input_len - 1].logsumexp(1));
+//    }
 
     at::Tensor input_aligned = should_roll ? roll_to_end(inputs, input_lengths) : inputs;
     auto beta = fully_connected_beta_recursion(input_aligned, transition, batch_input_len, num_batches, num_labels);
     beta = should_roll ? roll_to_end(beta, input_lengths, true) : beta;
-
+    auto forward_scores = (beta[0] + inputs[0]).logsumexp(1);
     return {forward_scores, alpha, beta, path_contrib};
 }
 

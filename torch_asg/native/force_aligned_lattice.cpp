@@ -22,7 +22,8 @@ make_aligned_inputs(
         int64_t batch_output_len
 ) {
     constexpr auto neg_inf = -std::numeric_limits<scalar_t>::infinity();
-    at::Tensor aligned = at::full({batch_input_len, num_batches, batch_output_len}, neg_inf, inputs.options());
+    at::Tensor aligned = at::full({batch_input_len, num_batches, batch_output_len}, neg_inf,
+                                  inputs.options().requires_grad(false));
     auto aligned_a = aligned.accessor<scalar_t, 3>();
     auto inputs_a = inputs.accessor<scalar_t, 3>();
     auto outputs_a = outputs.accessor<int64_t, 2>();
@@ -53,7 +54,7 @@ make_aligned_transition(
         int64_t batch_output_len
 ) {
 //    constexpr auto neg_inf = -std::numeric_limits<scalar_t>::infinity();
-    at::Tensor aligned = at::empty({2, num_batches, batch_output_len}, transition.options());
+    at::Tensor aligned = at::zeros({2, num_batches, batch_output_len}, transition.options().requires_grad(false));
     auto transition_a = transition.accessor<scalar_t, 2>();
     auto aligned_a = aligned.accessor<scalar_t, 3>();
     auto outputs_a = outputs.accessor<int64_t, 2>();
@@ -90,10 +91,10 @@ force_aligned_alpha_recursion(
 
     auto alpha_inv_idx = alpha.permute({2, 1, 0}); // output_len, num_batches, input_len
     auto aligned_inputs_inv_idx = aligned_inputs.permute({2, 1, 0});
-    auto path_contrib = at::empty({batch_input_len - 1,
+    auto path_contrib = at::zeros({batch_input_len - 1,
                                    2,
                                    num_batches,
-                                   batch_output_len - 1}, aligned_inputs.options());
+                                   batch_output_len - 1}, aligned_inputs.options().requires_grad(false));
     auto self_transition = aligned_transition[0]; // num_batches, batch_output_len
     auto next_transition = aligned_transition[1]; // num_batches, batch_output_len
 
@@ -170,13 +171,14 @@ force_aligned_derivative(
         int64_t num_batches,
         int64_t batch_output_len
 ) {
-    auto aligned_inputs_grad = gamma.softmax(2) * grad_out.view({1, num_batches, 1});
+    auto aligned_inputs_grad = masked_softmax(gamma, 2) * grad_out.view({1, num_batches, 1});
     auto path_factor = masked_softmax(path_contrib, 1).permute(
             {1, 0, 2, 3}); // <<2>>, batch_input_len - 1, num_batches, batch_output_len - 1
     auto hori_factor = path_factor[0]; // batch_input_len - 1, num_batches, batch_output_len - 1
     auto diag_factor = path_factor[1]; // batch_input_len - 1, num_batches, batch_output_len - 1
 
-    at::Tensor aligned_transition_grad = at::empty({2, num_batches, batch_output_len}, gamma.options());
+    at::Tensor aligned_transition_grad = at::zeros({2, num_batches, batch_output_len},
+                                                   gamma.options().requires_grad(false));
     auto self_trans_grad = aligned_transition_grad[0];
     auto next_trans_grad = aligned_transition_grad[1];
 
@@ -199,7 +201,7 @@ collect_scores(
         at::Tensor &output_lengths,
         int64_t num_batches
 ) {
-    at::Tensor result = at::empty({num_batches}, alpha.options());
+    at::Tensor result = at::zeros({num_batches}, alpha.options().requires_grad(false));
     auto alpha_a = alpha.accessor<scalar_t, 3>();
     auto result_a = result.accessor<scalar_t, 1>();
     auto input_lengths_a = input_lengths.accessor<int64_t, 1>();
@@ -219,7 +221,8 @@ collect_transition_grad(
         int64_t num_batches,
         int64_t num_labels
 ) {
-    at::Tensor transition_grad = at::zeros({num_labels, num_labels}, aligned_transition_grad.options());
+    at::Tensor transition_grad = at::zeros({num_labels, num_labels},
+                                           aligned_transition_grad.options().requires_grad(false));
     auto transition_grad_a = transition_grad.accessor<scalar_t, 2>();
     auto output_lengths_a = output_lengths.accessor<int64_t, 1>();
     auto outputs_a = outputs.accessor<int64_t, 2>();
@@ -251,7 +254,8 @@ collect_input_grad(
         int64_t num_batches,
         int64_t num_labels
 ) {
-    at::Tensor inputs_grad = at::zeros({batch_input_len, num_batches, num_labels}, aligned_input_grad.options());
+    at::Tensor inputs_grad = at::zeros({batch_input_len, num_batches, num_labels},
+                                       aligned_input_grad.options().requires_grad(false));
     auto inputs_grad_a = inputs_grad.accessor<scalar_t, 3>();
     auto input_lengths_a = input_lengths.accessor<int64_t, 1>();
     auto output_lengths_a = output_lengths.accessor<int64_t, 1>();

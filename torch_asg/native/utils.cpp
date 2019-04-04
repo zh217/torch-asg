@@ -45,14 +45,13 @@ roll_to_end(
 ) {
     AT_ASSERT(input_lengths.dtype() == at::kLong);
     constexpr auto neg_inf = -std::numeric_limits<double>::infinity();
-    auto rolled = at::full_like(aligned, neg_inf);
+    auto rolled = at::full_like(aligned, neg_inf, aligned.options().requires_grad(false));
     auto aligned_transposed = aligned.permute({1, 0, 2});
     auto rolled_transposed = rolled.permute({1, 0, 2});
     auto n_batch = input_lengths.size(0);
     auto batch_input_len = aligned.size(0);
     auto input_lengths_a = input_lengths.accessor<int64_t, 1>();
 
-#pragma omp parallel
     for (int64_t b = 0; b < n_batch; ++b) {
         auto inp_len = input_lengths_a[b];
         if (to_front) {
