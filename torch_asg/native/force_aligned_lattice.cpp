@@ -3,16 +3,22 @@
 //
 
 #include "force_aligned_lattice.h"
+#include "force_aligned_lattice_gpu.h"
 
 #include <omp.h>
 #include <limits>
+
+#define MY_DISPATCH_FLOAT_AND_DEVICE(func, fst_arg, ...) \
+(fst_arg.dtype() == at::kFloat) ? \
+(fst_arg.is_cuda() ? func ## _gpu<float>(fst_arg, ##__VA_ARGS__) : func ## _cpu<float>(fst_arg, ##__VA_ARGS__)) : \
+(fst_arg.is_cuda() ? func ## _gpu<double>(fst_arg, ##__VA_ARGS__) : func ## _cpu<double>(fst_arg, ##__VA_ARGS__))
 
 namespace torch_asg {
 
 
 template<typename scalar_t>
 at::Tensor
-make_aligned_inputs(
+make_aligned_inputs_cpu(
         at::Tensor &inputs,
         at::Tensor &outputs,
         at::Tensor &input_lengths,
@@ -45,7 +51,7 @@ make_aligned_inputs(
 
 template<typename scalar_t>
 at::Tensor
-make_aligned_transition(
+make_aligned_transition_cpu(
         at::Tensor &transition,
         at::Tensor &outputs,
         at::Tensor &input_lengths,
@@ -60,18 +66,22 @@ make_aligned_transition(
     auto outputs_a = outputs.accessor<int64_t, 2>();
     auto output_lengths_a = output_lengths.accessor<int64_t, 1>();
 
-#pragma omp parallel for
+#pragma omp parallel for collapse(2)
     for (int64_t b = 0; b < num_batches; ++b) {
-        auto cur_output_len = output_lengths_a[b];
-        for (int64_t s = 0; s < cur_output_len - 1; ++s) {
-            auto cur = outputs_a[b][s];
-            auto nxt = outputs_a[b][s + 1];
-            aligned_a[0][b][s] = transition_a[cur][cur];
-            aligned_a[1][b][s] = transition_a[nxt][cur];
+        for (int64_t s = 0; s < batch_output_len; ++s) {
+            auto cur_output_len = output_lengths_a[b];
+            if (s < cur_output_len - 1) {
+                auto cur = outputs_a[b][s];
+                auto nxt = outputs_a[b][s + 1];
+                aligned_a[0][b][s] = transition_a[cur][cur];
+                aligned_a[1][b][s] = transition_a[nxt][cur];
+            } else if (s == cur_output_len - 1) {
+                auto last = outputs_a[b][cur_output_len - 1];
+                aligned_a[0][b][cur_output_len - 1] = transition_a[last][last];
+            }
         }
-        auto last = outputs_a[b][cur_output_len - 1];
-        aligned_a[0][b][cur_output_len - 1] = transition_a[last][last];
     }
+
     return aligned;
 }
 
@@ -214,7 +224,7 @@ collect_scores(
 
 template<typename scalar_t>
 at::Tensor
-collect_transition_grad(
+collect_transition_grad_cpu(
         at::Tensor &aligned_transition_grad,
         at::Tensor &outputs,
         at::Tensor &output_lengths,
@@ -245,7 +255,7 @@ collect_transition_grad(
 
 template<typename scalar_t>
 at::Tensor
-collect_input_grad(
+collect_input_grad_cpu(
         at::Tensor &aligned_input_grad,
         at::Tensor &outputs,
         at::Tensor &input_lengths,
@@ -289,16 +299,16 @@ force_aligned_forward(
         int64_t num_labels,
         int64_t batch_output_len
 ) {
-    at::Tensor aligned_inputs = MY_DISPATCH_FLOAT(make_aligned_inputs,
-                                                  inputs, outputs,
-                                                  input_lengths, output_lengths,
-                                                  batch_input_len,
-                                                  num_batches, batch_output_len);
+    at::Tensor aligned_inputs = MY_DISPATCH_FLOAT_AND_DEVICE(make_aligned_inputs,
+                                                             inputs, outputs,
+                                                             input_lengths, output_lengths,
+                                                             batch_input_len,
+                                                             num_batches, batch_output_len);
 
-    at::Tensor aligned_transition = MY_DISPATCH_FLOAT(make_aligned_transition,
-                                                      transition, outputs,
-                                                      input_lengths, output_lengths,
-                                                      num_batches, batch_output_len);
+    at::Tensor aligned_transition = MY_DISPATCH_FLOAT_AND_DEVICE(make_aligned_transition,
+                                                                 transition, outputs,
+                                                                 input_lengths, output_lengths,
+                                                                 num_batches, batch_output_len);
 
     auto alpha_result = force_aligned_alpha_recursion(aligned_inputs, aligned_transition,
                                                       batch_input_len, num_batches, batch_output_len);
@@ -337,12 +347,12 @@ force_aligned_backward(
     auto aligned_inputs_grad = std::get<0>(grad_results);
     auto aligned_transition_grad = std::get<1>(grad_results);
 
-    auto inputs_grad = MY_DISPATCH_FLOAT(collect_input_grad,
-                                         aligned_inputs_grad, outputs, input_lengths, output_lengths,
-                                         batch_input_len, num_batches, num_labels);
-    auto transition_grad = MY_DISPATCH_FLOAT(collect_transition_grad,
-                                             aligned_transition_grad, outputs,
-                                             output_lengths, num_batches, num_labels);
+    auto inputs_grad = MY_DISPATCH_FLOAT_AND_DEVICE(collect_input_grad,
+                                                    aligned_inputs_grad, outputs, input_lengths, output_lengths,
+                                                    batch_input_len, num_batches, num_labels);
+    auto transition_grad = MY_DISPATCH_FLOAT_AND_DEVICE(collect_transition_grad,
+                                                        aligned_transition_grad, outputs,
+                                                        output_lengths, num_batches, num_labels);
     return {transition_grad, inputs_grad};
 }
 
