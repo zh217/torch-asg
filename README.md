@@ -3,6 +3,8 @@
 This repo contains a pytorch implementation of the auto segmentation criterion (ASG), introduced in the paper 
 [_Wav2Letter: an End-to-End ConvNet-based Speech Recognition System_](https://arxiv.org/abs/1609.03193) by Facebook.
 
+**This is currently a work in progress, code on master branch may not work as expected.**
+
 As mentioned in [this blog post](http://danielgalvez.me/jekyll/update/2018/01/12/wav2letter.html) by Daniel Galvez,
 ASG, being an alternative to the connectionist temporal classification (CTC) criterion widely used in deep learning, 
 has the advantage of being a globally normalized model without the conditional independence assumption of CTC and the 
@@ -12,13 +14,23 @@ potential of playing better with
 Unfortunately, Facebook's implementation in its official 
 [wav2letter++](https://github.com/facebookresearch/wav2letter) project is based on the ArrayFire C++ framework, which 
 makes experimentation rather difficult. Hence we have ported the ASG implementation in wav2letter++ to pytorch as
-C++ extensions. For the CPU implementation we have stayed quite close to the original implementation, whereas for the
-GPU we have taken a lot of leeway while ensuring that the results tally with the CPU's.
+C++ extensions.
+
+Our implementation should produce the same result as Facebook's, but the implementation is **completely different**.
+For example, in their implementation after doing an alpha recursion during the forward pass, they just brute force the
+back-propagation during the backward pass, whereas we do a proper alpha-beta recursion during the forward pass, and
+during the backward pass there is no recursion at all. Our implementation has the benefit of much higher parallelism 
+potential, with the disadvantage of doing useless work if you do not need the gradient. But if you don't need the
+gradient, maybe you should use a Viterbi decoder instead. Another difference is that we try to use pytorch's native
+functions as much as possible, whereas Facebook's implementation is basically a gigantic hand-written C code working
+on raw arrays.
+
+In the doc folder, you can find the maths derivation of our implementation.
 
 ## Project status
 
 * [x] CPU (openmp) implementation
-* [ ] GPU (cuda) implementation
+* [ ] GPU (cuda) implementation -- almost done
 * [ ] extensive testing
 * [ ] performance tuning and comparison
 * [ ] Viterbi decoders 
