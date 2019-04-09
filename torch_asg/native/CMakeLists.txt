@@ -22,5 +22,7 @@ target_compile_options(torch_asg PRIVATE $<$<COMPILE_LANGUAGE:CUDA>:-gencode arc
 
 set(PYBIND11_CPP_STANDARD -std=c++14)
 
+target_compile_definitions(torch_asg PRIVATE TORCH_ASG_SUPPORTS_CUDA)
+
 target_link_libraries(torch_asg PRIVATE "${TORCH_LIBRARIES}")
 #target_link_libraries(torch_asg_cuda PRIVATE "${TORCH_LIBRARIES}")

@@ -5,13 +5,14 @@
 #ifndef TORCH_ASG_FORCE_ALIGNED_LATTICE_GPU_H
 #define TORCH_ASG_FORCE_ALIGNED_LATTICE_GPU_H
 
-namespace torch_asg {
-
 #ifdef TORCH_ASG_SUPPORTS_CUDA
 
 #include "force_aligned_lattice_kernel.h"
 
 #else
+
+
+namespace torch_asg {
 
 template<typename scalar_t>
 at::Tensor
@@ -66,8 +67,8 @@ collect_input_grad_gpu(
     throw std::runtime_error("Not compiled with CUDA support");
 }
 
-#endif
-
 }
+
+#endif
 
 #endif //TORCH_ASG_FORCE_ALIGNED_LATTICE_GPU_H

@@ -1,3 +1,4 @@
+#include <ATen/ATen.h>
 #include <cuda.h>
 #include <cuda_runtime.h>
 
@@ -52,63 +53,79 @@ make_aligned_inputs_kernel(
     }
 }
 
+
+template<typename scalar_t>
+at::Tensor
+make_aligned_inputs_gpu(
+        at::Tensor &inputs,
+        at::Tensor &outputs,
+        at::Tensor &input_lengths,
+        at::Tensor &output_lengths,
+        int64_t batch_input_len,
+        int64_t num_batches,
+        int64_t batch_output_len
+) {
+    constexpr auto neg_inf = -std::numeric_limits<scalar_t>::infinity();
+    at::Tensor aligned = at::full({batch_input_len, num_batches, batch_output_len}, neg_inf,
+                                  inputs.options().requires_grad(false));
+
+    // TODO
+    make_aligned_inputs_kernel<scalar_t>
+            <<<1, 1>>>
+            (
+                    aligned.data<scalar_t>(),
+                    inputs.data<scalar_t>(),
+                    outputs.data<int64_t>(),
+                    input_lengths.data<int64_t>(),
+                    output_lengths.data<int64_t>(),
+
+                    aligned.stride(0),
+                    aligned.stride(1),
+                    aligned.stride(2),
+
+                    inputs.stride(0),
+                    inputs.stride(1),
+                    inputs.stride(2),
+
+                    outputs.stride(0),
+                    outputs.stride(1),
+
+                    input_lengths.stride(0),
+
+                    output_lengths.stride(0),
+
+                    batch_input_len,
+                    num_batches,
+                    batch_output_len
+            );
+
+    return aligned;
+}
+
 template
-__global__ void
-make_aligned_inputs_kernel<float>(
-        float *__restrict__ aligned,
-        const float *__restrict__ inputs,
-        const int64_t *__restrict__ outputs,
-        const int64_t *__restrict__ input_lengths,
-        const int64_t *__restrict__ output_lengths,
-
-        const int64_t aligned_stride_0,
-        const int64_t aligned_stride_1,
-        const int64_t aligned_stride_2,
-
-        const int64_t inputs_stride_0,
-        const int64_t inputs_stride_1,
-        const int64_t inputs_stride_2,
-
-        const int64_t outputs_stride_0,
-        const int64_t outputs_stride_1,
-
-        const int64_t input_lengths_stride_0,
-
-        const int64_t output_lengths_stride_0,
-
-        const int64_t batch_input_len,
-        const int64_t num_batches,
-        const int64_t batch_output_len
+at::Tensor
+make_aligned_inputs_gpu<float>(
+        at::Tensor &inputs,
+        at::Tensor &outputs,
+        at::Tensor &input_lengths,
+        at::Tensor &output_lengths,
+        int64_t batch_input_len,
+        int64_t num_batches,
+        int64_t batch_output_len
 );
 
 template
-__global__ void
-make_aligned_inputs_kernel<double>(
-        double *__restrict__ aligned,
-        const double *__restrict__ inputs,
-        const int64_t *__restrict__ outputs,
-        const int64_t *__restrict__ input_lengths,
-        const int64_t *__restrict__ output_lengths,
-
-        const int64_t aligned_stride_0,
-        const int64_t aligned_stride_1,
-        const int64_t aligned_stride_2,
-
-        const int64_t inputs_stride_0,
-        const int64_t inputs_stride_1,
-        const int64_t inputs_stride_2,
-
-        const int64_t outputs_stride_0,
-        const int64_t outputs_stride_1,
-
-        const int64_t input_lengths_stride_0,
-
-        const int64_t output_lengths_stride_0,
-
-        const int64_t batch_input_len,
-        const int64_t num_batches,
-        const int64_t batch_output_len
+at::Tensor
+make_aligned_inputs_gpu<double>(
+        at::Tensor &inputs,
+        at::Tensor &outputs,
+        at::Tensor &input_lengths,
+        at::Tensor &output_lengths,
+        int64_t batch_input_len,
+        int64_t num_batches,
+        int64_t batch_output_len
 );
+
 
 template<typename scalar_t>
 __global__ void
@@ -160,55 +177,68 @@ make_aligned_transition_kernel(
     }
 }
 
+
+template<typename scalar_t>
+at::Tensor
+make_aligned_transition_gpu(
+        at::Tensor &transition,
+        at::Tensor &outputs,
+        at::Tensor &input_lengths,
+        at::Tensor &output_lengths,
+        int64_t num_batches,
+        int64_t batch_output_len
+) {
+    at::Tensor aligned = at::zeros({2, num_batches, batch_output_len}, transition.options().requires_grad(false));
+
+    make_aligned_transition_kernel<scalar_t>
+             <<<1, 1>>>
+            (
+                    aligned.data<scalar_t>(),
+                    transition.data<scalar_t>(),
+                    outputs.data<int64_t>(),
+                    output_lengths.data<int64_t>(),
+
+                    aligned.stride(0),
+                    aligned.stride(1),
+                    aligned.stride(2),
+
+                    transition.stride(0),
+                    transition.stride(1),
+
+                    outputs.stride(0),
+                    outputs.stride(1),
+
+                    output_lengths.stride(0),
+
+                    num_batches,
+                    batch_output_len
+            );
+
+    return aligned;
+}
+
+
 template
-__global__ void
-make_aligned_transition_kernel<float>(
-        float *__restrict__ aligned_transition,
-        const float *__restrict__ transition,
-        const int64_t *__restrict__ outputs,
-        const int64_t *__restrict__ output_lengths,
-
-        const int64_t aligned_transition_stride_0,
-        const int64_t aligned_transition_stride_1,
-        const int64_t aligned_transition_stride_2,
-
-        const int64_t transition_stride_0,
-        const int64_t transition_stride_1,
-
-        const int64_t outputs_stride_0,
-        const int64_t outputs_stride_1,
-
-        const int64_t output_lengths_stride_0,
-
-        const int64_t num_batches,
-        const int64_t batch_output_len
+at::Tensor
+make_aligned_transition_gpu<float>(
+        at::Tensor &transition,
+        at::Tensor &outputs,
+        at::Tensor &input_lengths,
+        at::Tensor &output_lengths,
+        int64_t num_batches,
+        int64_t batch_output_len
 );
 
-
 template
-__global__ void
-make_aligned_transition_kernel<double>(
-        double *__restrict__ aligned_transition,
-        const double *__restrict__ transition,
-        const int64_t *__restrict__ outputs,
-        const int64_t *__restrict__ output_lengths,
-
-        const int64_t aligned_transition_stride_0,
-        const int64_t aligned_transition_stride_1,
-        const int64_t aligned_transition_stride_2,
-
-        const int64_t transition_stride_0,
-        const int64_t transition_stride_1,
-
-        const int64_t outputs_stride_0,
-        const int64_t outputs_stride_1,
-
-        const int64_t output_lengths_stride_0,
-
-        const int64_t num_batches,
-        const int64_t batch_output_len
+at::Tensor
+make_aligned_transition_gpu<double>(
+        at::Tensor &transition,
+        at::Tensor &outputs,
+        at::Tensor &input_lengths,
+        at::Tensor &output_lengths,
+        int64_t num_batches,
+        int64_t batch_output_len
 );
-
 
 template<typename scalar_t>
 __global__ void
@@ -233,17 +263,6 @@ collect_transition_grad_kernel(
         const int64_t num_batches,
         const int64_t batch_output_len
 ) {
-//     for (int64_t b = 0; b < num_batches; ++b) {
-//        auto cur_output_len = output_lengths_a[b];
-//        for (int64_t s = 0; s < cur_output_len - 1; ++s) {
-//            auto cur = outputs_a[b][s];
-//            auto nxt = outputs_a[b][s + 1];
-//            transition_grad_a[cur][cur] += aligned_a[0][b][s];
-//            transition_grad_a[nxt][cur] += aligned_a[1][b][s];
-//        }
-//        auto last = outputs_a[b][cur_output_len - 1];
-//        transition_grad_a[last][last] += aligned_a[0][b][cur_output_len - 1];
-//    }
     int64_t b = threadIdx.x + blockIdx.x * blockDim.x;
     int64_t s = threadIdx.y + blockIdx.y * blockDim.y;
 
@@ -273,55 +292,64 @@ collect_transition_grad_kernel(
 }
 
 
+template<typename scalar_t>
+at::Tensor
+collect_transition_grad_gpu(
+        at::Tensor &aligned_transition_grad,
+        at::Tensor &outputs,
+        at::Tensor &output_lengths,
+        int64_t num_batches,
+        int64_t num_labels
+) {
+    at::Tensor transition_grad = at::zeros({num_labels, num_labels},
+                                           aligned_transition_grad.options().requires_grad(false));
+
+    collect_transition_grad_kernel<scalar_t>
+             <<<1, 1>>>
+            (
+                    transition_grad.data<scalar_t>(),
+                    aligned_transition_grad.data<scalar_t>(),
+                    outputs.data<int64_t>(),
+                    output_lengths.data<int64_t>(),
+
+                    transition_grad.stride(0),
+                    transition_grad.stride(1),
+
+                    aligned_transition_grad.stride(0),
+                    aligned_transition_grad.stride(1),
+                    aligned_transition_grad.stride(2),
+
+                    outputs.stride(0),
+                    outputs.stride(1),
+
+                    output_lengths.stride(0),
+
+                    num_batches,
+                    outputs.size(1)
+            );
+
+    return transition_grad;
+}
+
 template
-__global__ void
-collect_transition_grad_kernel<float>(
-        float *__restrict__ transition_grad,
-        const float *__restrict__ aligned_transition_grad,
-        const int64_t *__restrict__ outputs,
-        const int64_t *__restrict__ output_lengths,
-
-        const int64_t transition_grad_stride_0,
-        const int64_t transition_grad_stride_1,
-
-        const int64_t aligned_transition_grad_stride_0,
-        const int64_t aligned_transition_grad_stride_1,
-        const int64_t aligned_transition_grad_stride_2,
-
-        const int64_t outputs_stride_0,
-        const int64_t outputs_stride_1,
-
-        const int64_t output_lengths_stride_0,
-
-        const int64_t num_batches,
-        const int64_t batch_output_len
+at::Tensor
+collect_transition_grad_gpu<float>(
+        at::Tensor &aligned_transition_grad,
+        at::Tensor &outputs,
+        at::Tensor &output_lengths,
+        int64_t num_batches,
+        int64_t num_labels
 );
 
-
 template
-__global__ void
-collect_transition_grad_kernel<double>(
-        double *__restrict__ transition_grad,
-        const double *__restrict__ aligned_transition_grad,
-        const int64_t *__restrict__ outputs,
-        const int64_t *__restrict__ output_lengths,
-
-        const int64_t transition_grad_stride_0,
-        const int64_t transition_grad_stride_1,
-
-        const int64_t aligned_transition_grad_stride_0,
-        const int64_t aligned_transition_grad_stride_1,
-        const int64_t aligned_transition_grad_stride_2,
-
-        const int64_t outputs_stride_0,
-        const int64_t outputs_stride_1,
-
-        const int64_t output_lengths_stride_0,
-
-        const int64_t num_batches,
-        const int64_t batch_output_len
+at::Tensor
+collect_transition_grad_gpu<double>(
+        at::Tensor &aligned_transition_grad,
+        at::Tensor &outputs,
+        at::Tensor &output_lengths,
+        int64_t num_batches,
+        int64_t num_labels
 );
-
 
 template<typename scalar_t>
 __global__ void
@@ -379,66 +407,76 @@ collect_input_grad_kernel(
 
 }
 
+
+template<typename scalar_t>
+at::Tensor
+collect_input_grad_gpu(
+        at::Tensor &aligned_input_grad,
+        at::Tensor &outputs,
+        at::Tensor &input_lengths,
+        at::Tensor &output_lengths,
+        int64_t batch_input_len,
+        int64_t num_batches,
+        int64_t num_labels
+) {
+    at::Tensor inputs_grad = at::zeros({batch_input_len, num_batches, num_labels},
+                                       aligned_input_grad.options().requires_grad(false));
+
+
+    collect_input_grad_kernel<scalar_t>
+             <<<1, 1>>>
+            (
+                    inputs_grad.data<scalar_t>(),
+                    aligned_input_grad.data<scalar_t>(),
+                    outputs.data<int64_t>(),
+                    input_lengths.data<int64_t>(),
+                    output_lengths.data<int64_t>(),
+
+                    inputs_grad.stride(0),
+                    inputs_grad.stride(1),
+                    inputs_grad.stride(2),
+
+                    aligned_input_grad.stride(0),
+                    aligned_input_grad.stride(1),
+                    aligned_input_grad.stride(2),
+
+                    outputs.stride(0),
+                    outputs.stride(1),
+
+                    input_lengths.stride(0),
+
+                    output_lengths.stride(0),
+
+                    batch_input_len,
+                    num_batches,
+                    outputs.size(1)
+            );
+
+    return inputs_grad;
+}
+
 template
-__global__ void
-collect_input_grad_kernel<float>(
-        float *__restrict__ inputs_grad,
-        const float *__restrict__ aligned_inputs_grad,
-        const int64_t *__restrict__ outputs,
-        const int64_t *__restrict__ input_lengths,
-        const int64_t *__restrict__ output_lengths,
-
-        const int64_t inputs_grad_stride_0,
-        const int64_t inputs_grad_stride_1,
-        const int64_t inputs_grad_stride_2,
-
-        const int64_t aligned_inputs_grad_stride_0,
-        const int64_t aligned_inputs_grad_stride_1,
-        const int64_t aligned_inputs_grad_stride_2,
-
-
-        const int64_t outputs_stride_0,
-        const int64_t outputs_stride_1,
-
-        const int64_t input_lengths_stride_0,
-
-        const int64_t output_lengths_stride_0,
-
-        const int64_t batch_input_len,
-        const int64_t num_batches,
-        const int64_t batch_output_len
+at::Tensor
+collect_input_grad_gpu<float>(
+        at::Tensor &aligned_input_grad,
+        at::Tensor &outputs,
+        at::Tensor &input_lengths,
+        at::Tensor &output_lengths,
+        int64_t batch_input_len,
+        int64_t num_batches,
+        int64_t num_labels
 );
 
-
 template
-__global__ void
-collect_input_grad_kernel<double>(
-        double *__restrict__ inputs_grad,
-        const double *__restrict__ aligned_inputs_grad,
-        const int64_t *__restrict__ outputs,
-        const int64_t *__restrict__ input_lengths,
-        const int64_t *__restrict__ output_lengths,
-
-        const int64_t inputs_grad_stride_0,
-        const int64_t inputs_grad_stride_1,
-        const int64_t inputs_grad_stride_2,
-
-        const int64_t aligned_inputs_grad_stride_0,
-        const int64_t aligned_inputs_grad_stride_1,
-        const int64_t aligned_inputs_grad_stride_2,
-
-
-        const int64_t outputs_stride_0,
-        const int64_t outputs_stride_1,
-
-        const int64_t input_lengths_stride_0,
-
-        const int64_t output_lengths_stride_0,
-
-        const int64_t batch_input_len,
-        const int64_t num_batches,
-        const int64_t batch_output_len
+at::Tensor
+collect_input_grad_gpu<double>(
+        at::Tensor &aligned_input_grad,
+        at::Tensor &outputs,
+        at::Tensor &input_lengths,
+        at::Tensor &output_lengths,
+        int64_t batch_input_len,
+        int64_t num_batches,
+        int64_t num_labels
 );
-
 
 }
