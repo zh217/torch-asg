@@ -69,9 +69,10 @@ make_aligned_inputs_gpu(
     at::Tensor aligned = at::full({batch_input_len, num_batches, batch_output_len}, neg_inf,
                                   inputs.options().requires_grad(false));
 
-    // TODO
+    dim3 block_dim(1, 32, 16); // b, t, s
+    dim3 grid_dim(num_batches, (batch_input_len + 31) / 32, (batch_output_len + 15) / 16);
     make_aligned_inputs_kernel<scalar_t>
-            <<<1, 1>>>
+            <<<grid_dim, block_dim>>>
             (
                     aligned.data<scalar_t>(),
                     inputs.data<scalar_t>(),
@@ -190,8 +191,11 @@ make_aligned_transition_gpu(
 ) {
     at::Tensor aligned = at::zeros({2, num_batches, batch_output_len}, transition.options().requires_grad(false));
 
+    dim3 block_dim(8, 64, 1); // b, s
+    dim3 grid_dim((num_batches + 7) / 8, (batch_output_len + 63) / 64, 1);
+
     make_aligned_transition_kernel<scalar_t>
-             <<<1, 1>>>
+             <<<grid_dim, block_dim>>>
             (
                     aligned.data<scalar_t>(),
                     transition.data<scalar_t>(),
@@ -304,8 +308,13 @@ collect_transition_grad_gpu(
     at::Tensor transition_grad = at::zeros({num_labels, num_labels},
                                            aligned_transition_grad.options().requires_grad(false));
 
+    int64_t batch_output_len = outputs.size(1);
+
+    dim3 block_dim(8, 64, 1); // b, s
+    dim3 grid_dim((num_batches + 7) / 8, (batch_output_len + 63) / 64, 1);
+
     collect_transition_grad_kernel<scalar_t>
-             <<<1, 1>>>
+             <<<grid_dim, block_dim>>>
             (
                     transition_grad.data<scalar_t>(),
                     aligned_transition_grad.data<scalar_t>(),
@@ -325,7 +334,7 @@ collect_transition_grad_gpu(
                     output_lengths.stride(0),
 
                     num_batches,
-                    outputs.size(1)
+                    batch_output_len
             );
 
     return transition_grad;
@@ -422,9 +431,13 @@ collect_input_grad_gpu(
     at::Tensor inputs_grad = at::zeros({batch_input_len, num_batches, num_labels},
                                        aligned_input_grad.options().requires_grad(false));
 
+    int64_t batch_output_len = outputs.size(1);
+
+    dim3 block_dim(1, 32, 16); // b, t, s
+    dim3 grid_dim(num_batches, (batch_input_len + 31) / 32, (batch_output_len + 15) / 16);
 
     collect_input_grad_kernel<scalar_t>
-             <<<1, 1>>>
+             <<<grid_dim, block_dim>>>
             (
                     inputs_grad.data<scalar_t>(),
                     aligned_input_grad.data<scalar_t>(),
@@ -449,7 +462,7 @@ collect_input_grad_gpu(
 
                     batch_input_len,
                     num_batches,
-                    outputs.size(1)
+                    batch_output_len
             );
 
     return inputs_grad;
