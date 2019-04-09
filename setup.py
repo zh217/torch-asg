@@ -18,7 +18,14 @@ if torch.cuda.is_available():
                                   extra_compile_args={
                                       'cxx': ['-O2',
                                               '-DTORCH_ASG_SUPPORTS_CUDA'],
-                                      'nvcc': ['--gpu-architecture=sm_70', '-O3', '--use_fast_math',
+                                      'nvcc': ['-arch=sm_60',
+                                               '-gencode=arch=compute_60,code=sm_60',
+                                               '-gencode=arch=compute_61,code=sm_61',
+                                               '-gencode=arch=compute_70,code=sm_70',
+                                               '-gencode=arch=compute_75,code=sm_75',
+                                               '-gencode=arch=compute_75,code=compute_75',
+                                               '-O3',
+                                               '--use_fast_math',
                                                '--expt-extended-lambda',
                                                '--expt-relaxed-constexpr'
                                                ],
