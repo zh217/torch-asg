@@ -25,13 +25,13 @@ gradient, maybe you should use a Viterbi decoder instead. Another difference is 
 functions as much as possible, whereas Facebook's implementation is basically a gigantic hand-written C code working
 on raw arrays.
 
-In the [doc](doc) folder, you can find the maths derivation of our implementation.
+In the [doc](doc) folder, you can find the [maths derivation](doc/tech_report.pdf) of our implementation.
 
 ## Project status
 
 * [x] CPU (openmp) implementation
-* [ ] GPU (cuda) implementation -- almost done
-* [ ] extensive testing
+* [x] GPU (cuda) implementation
+* [x] testing
 * [ ] performance tuning and comparison
 * [ ] Viterbi decoders 
 * [ ] generalization to better integrate with general WFSTs decoders
@@ -45,7 +45,8 @@ cd torch_asg
 pip install .
 ```
 
-Tested with python 3.7.1. You need to have suitable C++ toolchain installed. Status on Windows is unclear.
+Tested with python 3.7.1. You need to have suitable C++ toolchain installed. For GPU, you need to have an nVidia card
+with compute capability >= 6.
 
 Then in your python code:
 
