@@ -299,6 +299,7 @@ force_aligned_forward(
         int64_t num_labels,
         int64_t batch_output_len
 ) {
+    at::Tensor input_lengths_cpu = input_lengths.is_cuda() ? input_lengths.to(at::kCPU, false, true) : input_lengths;
     at::Tensor aligned_inputs = MY_DISPATCH_FLOAT_AND_DEVICE(make_aligned_inputs,
                                                              inputs, outputs,
                                                              input_lengths, output_lengths,
@@ -316,11 +317,11 @@ force_aligned_forward(
     auto alpha = std::get<0>(alpha_result);
     auto path_contrib = std::get<1>(alpha_result);
 
-    bool should_roll_inputs = should_roll_to_end(input_lengths, batch_input_len);
+    bool should_roll_inputs = should_roll_to_end(input_lengths_cpu, batch_input_len);
     auto aligned_inputs_rolled = should_roll_inputs ? roll_to_end(aligned_inputs, input_lengths) : aligned_inputs;
     auto beta = force_aligned_beta_recursion(aligned_inputs_rolled, aligned_transition,
                                              output_lengths, batch_input_len, num_batches, batch_output_len);
-    beta = should_roll_inputs ? roll_to_end(beta, input_lengths, true) : beta;
+    beta = should_roll_inputs ? roll_to_end(beta, input_lengths_cpu, true) : beta;
 
 //    auto scores = MY_DISPATCH_FLOAT(collect_scores, alpha, input_lengths, output_lengths, num_batches);
     auto scores = beta[0].permute({1, 0})[0] + aligned_inputs[0].permute({1, 0})[0];

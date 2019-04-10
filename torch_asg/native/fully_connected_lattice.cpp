@@ -80,27 +80,16 @@ fully_connected_forward(
         int64_t num_batches,
         int64_t num_labels
 ) {
-
-    bool should_roll = should_roll_to_end(input_lengths, batch_input_len);
+    at::Tensor input_lengths_cpu = input_lengths.is_cuda() ? input_lengths.to(at::kCPU, false, true) : input_lengths;
+    bool should_roll = should_roll_to_end(input_lengths_cpu, batch_input_len);
 
     auto alpha_results = fully_connected_alpha_recursion(inputs, transition, batch_input_len, num_batches, num_labels);
     auto alpha = std::get<0>(alpha_results);
     auto path_contrib = std::get<1>(alpha_results);
 
-//    at::Tensor forward_scores = at::zeros({num_batches}, inputs.options());
-//    if (should_roll) {
-//
-//        for (int64_t b = 0; b < num_batches; ++b) {
-//            forward_scores[b] = alpha[input_lengths[b] - 1][b].logsumexp(0);
-//        }
-//
-//    } else {
-//        forward_scores.copy_(alpha[batch_input_len - 1].logsumexp(1));
-//    }
-
-    at::Tensor input_aligned = should_roll ? roll_to_end(inputs, input_lengths) : inputs;
+    at::Tensor input_aligned = should_roll ? roll_to_end(inputs, input_lengths_cpu) : inputs;
     auto beta = fully_connected_beta_recursion(input_aligned, transition, batch_input_len, num_batches, num_labels);
-    beta = should_roll ? roll_to_end(beta, input_lengths, true) : beta;
+    beta = should_roll ? roll_to_end(beta, input_lengths_cpu, true) : beta;
     auto forward_scores = (beta[0] + inputs[0]).logsumexp(1);
     return {forward_scores, alpha, beta, path_contrib};
 }

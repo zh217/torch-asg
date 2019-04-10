@@ -25,7 +25,7 @@ gradient, maybe you should use a Viterbi decoder instead. Another difference is 
 functions as much as possible, whereas Facebook's implementation is basically a gigantic hand-written C code working
 on raw arrays.
 
-In the doc folder, you can find the maths derivation of our implementation.
+In the [doc](doc) folder, you can find the maths derivation of our implementation.
 
 ## Project status
 

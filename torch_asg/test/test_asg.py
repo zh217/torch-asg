@@ -197,30 +197,33 @@ def test_fac_1(cuda):
     targets = torch.LongTensor([0, 1,
                                 0, 1]).view(B, S)
     expected = torch.logsumexp(torch.tensor([[1.5, 2.5], [2., 3.]]), dim=-1)
+    input_lengths = torch.LongTensor([T, T])
+    target_lengths = torch.LongTensor([S, S])
 
     if cuda:
         inputs = inputs.cuda()
         transition = transition.cuda()
         targets = targets.cuda()
         expected = expected.cuda()
+        input_lengths = input_lengths.cuda()
+        target_lengths = target_lengths.cuda()
 
-    print('a')
-    results = FAC.apply(transition, inputs, targets, torch.LongTensor([T, T]), torch.LongTensor([S, S]), 'none')
-    print('b')
+    results = FAC.apply(transition, inputs, targets, input_lengths, target_lengths, 'none')
     assert (results - expected).abs().sum() < EPSILON, results.abs().sum()
-    print('c')
     gradcheck(
-        lambda inp, trans: FAC.apply(trans, inp, targets, torch.LongTensor([T, T]), torch.LongTensor([S, S]),
+        lambda inp, trans: FAC.apply(trans, inp, targets, input_lengths, target_lengths,
                                      'none').sum(),
-        (inputs.clone().detach().requires_grad_(True),
+        (inputs.clone().detach().requires_grad_(False),
          transition.clone().detach().requires_grad_(True)))
+    print('OK')
 
 
 if __name__ == '__main__':
     test_fac_1(True)
 
 
-def test_fac_2():
+@pytest.mark.parametrize('cuda', TEST_CUDA_OPTS)
+def test_fac_2(cuda):
     torch.set_default_dtype(torch.float64)
     EPSILON = 1e-10
     B = 1
@@ -230,12 +233,22 @@ def test_fac_2():
     inputs = torch.full((B, T, N), torch.log(torch.tensor(0.25))).permute(1, 0, 2)
     transition = torch.zeros(N, N)
     targets = torch.LongTensor([0, 1]).view(B, S)
-    results = FAC.apply(transition, inputs, targets, torch.LongTensor([T]), torch.LongTensor([S]), 'none')
+    input_lengths = torch.LongTensor([T])
+    target_lengths = torch.LongTensor([S])
+
+    if cuda:
+        inputs = inputs.cuda()
+        transition = transition.cuda()
+        targets = targets.cuda()
+        input_lengths = input_lengths.cuda()
+        target_lengths = target_lengths.cuda()
+
+    results = FAC.apply(transition, inputs, targets, input_lengths, target_lengths, 'none')
     expected = -torch.log(torch.tensor(32.))
     assert (results - expected).abs().sum() < EPSILON, results.abs().sum()
     gradcheck(
-        lambda inp, trans: FAC.apply(trans, inp, targets, torch.LongTensor([T]), torch.LongTensor([S]), 'none').sum(),
-        (inputs.clone().detach().requires_grad_(True),
+        lambda inp, trans: FAC.apply(trans, inp, targets, input_lengths, target_lengths, 'none').sum(),
+        (inputs.clone().detach().requires_grad_(False),
          transition.clone().detach().requires_grad_(True)))
 
 
