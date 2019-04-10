@@ -213,13 +213,8 @@ def test_fac_1(cuda):
     gradcheck(
         lambda inp, trans: FAC.apply(trans, inp, targets, input_lengths, target_lengths,
                                      'none').sum(),
-        (inputs.clone().detach().requires_grad_(False),
+        (inputs.clone().detach().requires_grad_(True),
          transition.clone().detach().requires_grad_(True)))
-    print('OK')
-
-
-if __name__ == '__main__':
-    test_fac_1(True)
 
 
 @pytest.mark.parametrize('cuda', TEST_CUDA_OPTS)
@@ -248,11 +243,12 @@ def test_fac_2(cuda):
     assert (results - expected).abs().sum() < EPSILON, results.abs().sum()
     gradcheck(
         lambda inp, trans: FAC.apply(trans, inp, targets, input_lengths, target_lengths, 'none').sum(),
-        (inputs.clone().detach().requires_grad_(False),
+        (inputs.clone().detach().requires_grad_(True),
          transition.clone().detach().requires_grad_(True)))
 
 
-def test_fac_grad():
+@pytest.mark.parametrize('cuda', TEST_CUDA_OPTS)
+def test_fac_grad(cuda):
     torch.set_default_dtype(torch.float64)
     B = 3
     T = 5
@@ -263,19 +259,27 @@ def test_fac_grad():
                             [0, 1, 0],
                             [1, 0, 0], ])
     transition = torch.empty((N, N)).uniform_()
+    input_lengths = torch.LongTensor([T] * B)
+    target_lengths = torch.LongTensor([3, 2, 1])
+
+    if cuda:
+        inputs = inputs.cuda()
+        targets = targets.cuda()
+        transition = transition.cuda()
+        input_lengths = input_lengths.cuda()
+        target_lengths = target_lengths.cuda()
 
     # FAC.apply(transition, inputs, targets[:B], torch.LongTensor([T] * B)[:B],
     #           torch.LongTensor([3, 2, 1][:B]),
     #           'target_size_sqrt').sum()
 
     def f(inputs, transition):
-        return FAC.apply(transition, inputs, targets[:B], torch.LongTensor([T] * B)[:B],
-                         torch.LongTensor([3, 2, 1][:B]),
+        return FAC.apply(transition, inputs, targets[:B], input_lengths[:B], target_lengths[:B],
                          'target_size_sqrt').sum()
 
     gradcheck(f,
               (inputs[:, :B].clone().detach().requires_grad_(True),
-               transition.clone().detach().requires_grad_(True)))
+               transition.clone().detach().requires_grad_(False)))
 
 
 def test_asg_1():

@@ -170,7 +170,7 @@ make_aligned_transition_kernel(
         self_transition[b * aligned_transition_stride_1 + s * aligned_transition_stride_2] =
                 transition[cur * transition_stride_0 + cur * transition_stride_1];
         next_transition[b * aligned_transition_stride_1 + s * aligned_transition_stride_2] =
-                transition[cur * transition_stride_0 + nxt * transition_stride_1];
+                transition[nxt * transition_stride_0 + cur * transition_stride_1];
     } else if (s == cur_output_len - 1) {
         int64_t last = outputs[b * outputs_stride_0 + s * outputs_stride_1];
         self_transition[b * aligned_transition_stride_1 + s * aligned_transition_stride_2] =
@@ -403,14 +403,14 @@ collect_input_grad_kernel(
         return;
     }
 
-    int64_t output_len = output_lengths[s * output_lengths_stride_0];
+    int64_t output_len = output_lengths[b * output_lengths_stride_0];
 
     if (s >= output_len) {
         return;
     }
 
     int64_t label = outputs[b * outputs_stride_0 + s * outputs_stride_1];
-    atomicAdd(inputs_grad + t * inputs_grad_stride_0 + b * inputs_grad_stride_1 + s * label,
+    atomicAdd(inputs_grad + t * inputs_grad_stride_0 + b * inputs_grad_stride_1 + label * inputs_grad_stride_2,
               aligned_inputs_grad[t * aligned_inputs_grad_stride_0 + b * aligned_inputs_grad_stride_1 +
                                   s * aligned_inputs_grad_stride_2]);
 
