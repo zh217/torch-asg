@@ -62,7 +62,6 @@ def test_run():
     target_batch_len = 5
     asg_loss = ASGLoss(num_labels=num_labels,
                        reduction='mean',  # mean (default), sum, none
-                       scale_mode='none'  # none (default), input_size, input_size_sqrt, target_size, target_size_sqrt
                        )
     for i in range(1):
         # Note that inputs follows the CTC convention so that the batch dimension is 1 instead of 0,

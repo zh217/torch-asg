@@ -7,7 +7,7 @@ from torch_asg.asg import FCC, FAC
 TEST_CUDA_OPTS = [False, True] if torch.cuda.is_available() else []
 
 
-@pytest.mark.skip()
+# @pytest.mark.skip()
 @pytest.mark.parametrize('cuda', TEST_CUDA_OPTS)
 def test_run(cuda):
     num_labels = 7
@@ -16,22 +16,34 @@ def test_run(cuda):
     target_batch_len = 5
     asg_loss = ASGLoss(num_labels=num_labels,
                        reduction='mean',  # mean (default), sum, none
-                       scale_mode='none'  # none (default), input_size, input_size_sqrt, target_size, target_size_sqrt
                        )
+
+    inputs = torch.randn(input_batch_len, num_batches, num_labels, requires_grad=True)
+    targets = torch.randint(0, num_labels, (num_batches, target_batch_len))
+    input_lengths = torch.randint(1, input_batch_len + 1, (num_batches,))
+    target_lengths = torch.randint(1, target_batch_len + 1, (num_batches,))
+
+    if cuda:
+        inputs = inputs.clone().detach().cuda()
+        inputs.requires_grad = True
+        targets = targets.cuda()
+        input_lengths = input_lengths.cuda()
+        target_lengths = target_lengths.cuda()
+        asg_loss = asg_loss.cuda()
+
     asg_loss.transition.data.uniform_()
-    for i in range(1):
-        inputs = torch.randn(input_batch_len, num_batches, num_labels, requires_grad=True)
-        targets = torch.randint(0, num_labels, (num_batches, target_batch_len))
-        input_lengths = torch.randint(1, input_batch_len + 1, (num_batches,))
-        target_lengths = torch.randint(1, target_batch_len + 1, (num_batches,))
-        loss = asg_loss.forward(inputs, targets, None and input_lengths, None and target_lengths)
-        print('loss', loss)
-        # You can get the transition matrix if you need it.
-        # transition[i, j] is transition score from label j to label i.
-        print('transition matrix', asg_loss.transition)
-        loss.backward()
-        print('transition matrix grad', asg_loss.transition.grad)
-        print('inputs grad', inputs.grad)
+
+    # print('start')
+
+    loss = asg_loss.forward(inputs, targets, input_lengths, target_lengths)
+    # print('loss', loss)
+    # You can get the transition matrix if you need it.
+    # transition[i, j] is transition score from label j to label i.
+    # print('transition matrix', asg_loss.transition)
+    loss.backward()
+    # print('transition matrix grad', asg_loss.transition.grad)
+    # print('inputs grad', inputs.grad)
+
 
 
 @pytest.mark.parametrize('cuda', TEST_CUDA_OPTS)
@@ -52,11 +64,10 @@ def test_fcc_1(cuda):
         transition = transition.cuda()
         targets = targets.cuda()
 
-    results = FCC.apply(transition, inputs, targets, torch.LongTensor([T, T]), torch.LongTensor([S, S]), 'none')
+    results = FCC.apply(transition, inputs, targets, torch.LongTensor([T, T]), torch.LongTensor([S, S]))
     assert results.abs().sum() < EPSILON
     gradcheck(
-        lambda inp, trans: FCC.apply(trans, inp, targets, torch.LongTensor([T, T]), torch.LongTensor([S, S]),
-                                     'none').sum(),
+        lambda inp, trans: FCC.apply(trans, inp, targets, torch.LongTensor([T, T]), torch.LongTensor([S, S])).sum(),
         (inputs.clone().detach().requires_grad_(True),
          transition.clone().detach().requires_grad_(True)))
 
@@ -78,11 +89,10 @@ def test_fcc_2(cuda):
         transition = transition.cuda()
         targets = targets.cuda()
 
-    results = FCC.apply(transition, inputs, targets, torch.LongTensor([T, T]), torch.LongTensor([S, S]), 'none')
+    results = FCC.apply(transition, inputs, targets, torch.LongTensor([T, T]), torch.LongTensor([S, S]))
     assert results.abs().sum() < EPSILON, results.abs().sum()
     gradcheck(
-        lambda inp, trans: FCC.apply(trans, inp, targets, torch.LongTensor([T, T]), torch.LongTensor([S, S]),
-                                     'none').sum(),
+        lambda inp, trans: FCC.apply(trans, inp, targets, torch.LongTensor([T, T]), torch.LongTensor([S, S])).sum(),
         (inputs.clone().detach().requires_grad_(True),
          transition.clone().detach().requires_grad_(True)))
 
@@ -110,10 +120,10 @@ def test_fcc_3(cuda, use_double):
         transition = transition.cuda()
         targets = targets.cuda()
 
-    results = FCC.apply(transition, inputs, targets, torch.LongTensor([T] * B), torch.LongTensor([S] * B), 'none')
+    results = FCC.apply(transition, inputs, targets, torch.LongTensor([T] * B), torch.LongTensor([S] * B))
     assert results.abs().sum() < EPSILON, results.abs().sum()
     # gradcheck(
-    #     lambda inp, trans: FCC.apply(trans, inp, targets, torch.LongTensor([T] * B), torch.LongTensor([S] * B), 'none'),
+    #     lambda inp, trans: FCC.apply(trans, inp, targets, torch.LongTensor([T] * B), torch.LongTensor([S] * B)),
     #     (inputs.clone().detach().requires_grad_(True),
     #      transition.clone().detach().requires_grad_(True)))
 
@@ -135,8 +145,7 @@ def test_fcc_grad(cuda):
         targets = targets.cuda()
 
     def f(inputs, transition):
-        return FCC.apply(transition, inputs, targets, torch.LongTensor([T] * B), torch.LongTensor([S] * B),
-                         'target_size_sqrt').sum()
+        return FCC.apply(transition, inputs, targets, torch.LongTensor([T] * B), torch.LongTensor([S] * B)).sum()
 
     gradcheck(f,
               (inputs.clone().detach().requires_grad_(True),
@@ -170,8 +179,7 @@ def test_fcc_grad2(cuda):
 
         def f(inputs, transition):
             return FCC.apply(transition, inputs, targets,
-                             input_lengths, target_lengths,
-                             'target_size_sqrt').sum()
+                             input_lengths, target_lengths).sum()
 
         gradcheck(f,
                   (inputs.clone().detach().requires_grad_(True),
@@ -208,11 +216,10 @@ def test_fac_1(cuda):
         input_lengths = input_lengths.cuda()
         target_lengths = target_lengths.cuda()
 
-    results = FAC.apply(transition, inputs, targets, input_lengths, target_lengths, 'none')
+    results = FAC.apply(transition, inputs, targets, input_lengths, target_lengths)
     assert (results - expected).abs().sum() < EPSILON, results.abs().sum()
     gradcheck(
-        lambda inp, trans: FAC.apply(trans, inp, targets, input_lengths, target_lengths,
-                                     'none').sum(),
+        lambda inp, trans: FAC.apply(trans, inp, targets, input_lengths, target_lengths).sum(),
         (inputs.clone().detach().requires_grad_(True),
          transition.clone().detach().requires_grad_(True)))
 
@@ -238,11 +245,11 @@ def test_fac_2(cuda):
         input_lengths = input_lengths.cuda()
         target_lengths = target_lengths.cuda()
 
-    results = FAC.apply(transition, inputs, targets, input_lengths, target_lengths, 'none')
+    results = FAC.apply(transition, inputs, targets, input_lengths, target_lengths)
     expected = -torch.log(torch.tensor(32.))
     assert (results - expected).abs().sum() < EPSILON, results.abs().sum()
     gradcheck(
-        lambda inp, trans: FAC.apply(trans, inp, targets, input_lengths, target_lengths, 'none').sum(),
+        lambda inp, trans: FAC.apply(trans, inp, targets, input_lengths, target_lengths).sum(),
         (inputs.clone().detach().requires_grad_(True),
          transition.clone().detach().requires_grad_(True)))
 
@@ -274,8 +281,7 @@ def test_fac_grad(cuda):
     #           'target_size_sqrt').sum()
 
     def f(inputs, transition):
-        return FAC.apply(transition, inputs, targets[:B], input_lengths[:B], target_lengths[:B],
-                         'target_size_sqrt').sum()
+        return FAC.apply(transition, inputs, targets[:B], input_lengths[:B], target_lengths[:B]).sum()
 
     gradcheck(f,
               (inputs[:, :B].clone().detach().requires_grad_(True),

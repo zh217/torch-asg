@@ -318,7 +318,7 @@ force_aligned_forward(
     auto path_contrib = std::get<1>(alpha_result);
 
     bool should_roll_inputs = should_roll_to_end(input_lengths_cpu, batch_input_len);
-    auto aligned_inputs_rolled = should_roll_inputs ? roll_to_end(aligned_inputs, input_lengths) : aligned_inputs;
+    auto aligned_inputs_rolled = should_roll_inputs ? roll_to_end(aligned_inputs, input_lengths_cpu) : aligned_inputs;
     auto beta = force_aligned_beta_recursion(aligned_inputs_rolled, aligned_transition,
                                              output_lengths, batch_input_len, num_batches, batch_output_len);
     beta = should_roll_inputs ? roll_to_end(beta, input_lengths_cpu, true) : beta;
