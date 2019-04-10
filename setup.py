@@ -17,7 +17,8 @@ if torch.cuda.is_available():
                                            'torch_asg/native/force_aligned_lattice_kernel.cu'],
                                   extra_compile_args={
                                       'cxx': ['-O2',
-                                              '-DTORCH_ASG_SUPPORTS_CUDA'],
+                                              '-DTORCH_ASG_SUPPORTS_CUDA',
+                                              '-fopenmp'],
                                       'nvcc': ['-arch=sm_60',
                                                '-gencode=arch=compute_60,code=sm_60',
                                                '-gencode=arch=compute_61,code=sm_61',
