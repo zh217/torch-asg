@@ -3,8 +3,6 @@
 This repo contains a pytorch implementation of the auto segmentation criterion (ASG), introduced in the paper 
 [_Wav2Letter: an End-to-End ConvNet-based Speech Recognition System_](https://arxiv.org/abs/1609.03193) by Facebook.
 
-**This is currently a work in progress, code on master branch may not work as expected.**
-
 As mentioned in [this blog post](http://danielgalvez.me/jekyll/update/2018/01/12/wav2letter.html) by Daniel Galvez,
 ASG, being an alternative to the connectionist temporal classification (CTC) criterion widely used in deep learning, 
 has the advantage of being a globally normalized model without the conditional independence assumption of CTC and the 
@@ -20,8 +18,7 @@ Our implementation should produce the same result as Facebook's, but the impleme
 For example, in their implementation after doing an alpha recursion during the forward pass, they just brute force the
 back-propagation during the backward pass, whereas we do a proper alpha-beta recursion during the forward pass, and
 during the backward pass there is no recursion at all. Our implementation has the benefit of much higher parallelism 
-potential, with the disadvantage of doing useless work if you do not need the gradient. But if you don't need the
-gradient, maybe you should use a Viterbi decoder instead. Another difference is that we try to use pytorch's native
+potential. Another difference is that we try to use pytorch's native
 functions as much as possible, whereas Facebook's implementation is basically a gigantic hand-written C code working
 on raw arrays.
 
@@ -62,6 +59,8 @@ def test_run():
     target_batch_len = 5
     asg_loss = ASGLoss(num_labels=num_labels,
                        reduction='mean',  # mean (default), sum, none
+                       gpu_no_stream_impl=False, # see below for explanation
+                       forward_only=False # see below for explanation                      
                        )
     for i in range(1):
         # Note that inputs follows the CTC convention so that the batch dimension is 1 instead of 0,
@@ -82,4 +81,14 @@ def test_run():
 test_run()
 ```
 
-Hope this repo can help with your research.
+There are two options for the loss constructor that warrants further explanation:
+
+* `gpu_no_stream_impl`: by default, if you are using GPU, we are using an implementation that is highly concurrent by
+  doing some rather complicated CUDA streams manipulation. You can turn this concurrent implementation off by setting
+  this parameter to true, and then CUDA kernel launches are serial. Useful for debugging.
+* `forward_only`: by default, our implementation does quite a lot of work during the forward pass concurrently that is
+  only useful for calculating the gradients. If you don't need the gradient, setting this parameter to true will give
+  a further speed boost.
+  
+Compared to Facebook's implementation, we have also omitted scaling based on input/output lengths. If you need it, you
+can do it yourself by using the `None` reduction and scale the individual scores before summing/averaging.
