@@ -85,7 +85,7 @@ fast_asg_gpu_forward_only(
 
     at::cuda::setCurrentCUDAStream(stream1);
 
-    return forward_scores_full + forward_scores_aligned;
+    return forward_scores_full - forward_scores_aligned;
 
 }
 

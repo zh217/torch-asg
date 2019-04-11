@@ -9,10 +9,6 @@ class FAC(torch.autograd.Function):
     def forward(ctx, transition, inputs, targets, input_lengths, target_lengths):
         batch_input_len, num_batches, num_labels = inputs.shape
         _, batch_output_len = targets.shape
-        if batch_output_len > batch_input_len:
-            batch_output_len = batch_input_len
-            targets = targets[:, :batch_output_len]
-            target_lengths = torch.min(target_lengths, other=target_lengths.new_tensor([batch_output_len]))
         results = torch_asg_native.force_aligned_forward(inputs,
                                                          targets,
                                                          transition,
@@ -111,6 +107,13 @@ class ASGLoss(nn.Module):
         self.gpu_no_stream_impl = gpu_no_stream_impl
 
     def forward(self, inputs, targets, input_lengths, target_lengths):
+        batch_input_len, num_batches, num_labels = inputs.shape
+        _, batch_output_len = targets.shape
+        if batch_output_len > batch_input_len:
+            batch_output_len = batch_input_len
+            targets = targets[:, :batch_output_len]
+            target_lengths = torch.min(target_lengths, other=target_lengths.new_tensor([batch_output_len]))
+
         if self.gpu_no_stream_impl or not inputs.is_cuda:
             # use the "serial" implementation
             fac_result = FAC.apply(self.transition, inputs, targets, input_lengths, target_lengths)
@@ -121,9 +124,9 @@ class ASGLoss(nn.Module):
             result = ASGGPUFastForwardOnly.apply(inputs, targets, self.transition, input_lengths, target_lengths)
         else:
             # use the fast GPU implementation
-            full_scores, aligned_scores = ASGGPUFast.apply(inputs, targets, self.transition, input_lengths,
+            full_scores, aligned_scores = ASGGPUFast.apply(inputs, self.transition, targets, input_lengths,
                                                            target_lengths)
-            result = full_scores + aligned_scores
+            result = full_scores - aligned_scores
         if self.reduction == 'sum':
             return result.sum()
         elif self.reduction == 'mean':
