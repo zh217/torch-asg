@@ -33,4 +33,9 @@ roll_to_end(
 #define MY_DISPATCH_FLOAT(func, fst_arg, ...) \
 (fst_arg.dtype() == at::kFloat) ? func<float>(fst_arg, ##__VA_ARGS__) : func<double>(fst_arg, ##__VA_ARGS__)
 
+#define MY_DISPATCH_FLOAT_AND_DEVICE(func, fst_arg, ...) \
+(fst_arg.dtype() == at::kFloat) ? \
+(fst_arg.is_cuda() ? func ## _gpu<float>(fst_arg, ##__VA_ARGS__) : func ## _cpu<float>(fst_arg, ##__VA_ARGS__)) : \
+(fst_arg.is_cuda() ? func ## _gpu<double>(fst_arg, ##__VA_ARGS__) : func ## _cpu<double>(fst_arg, ##__VA_ARGS__))
+
 #endif //TORCH_ASG_UTILS_H

@@ -63,7 +63,8 @@ make_aligned_inputs_gpu(
         at::Tensor &output_lengths,
         int64_t batch_input_len,
         int64_t num_batches,
-        int64_t batch_output_len
+        int64_t batch_output_len,
+        cudaStream_t stream
 ) {
     constexpr auto neg_inf = -std::numeric_limits<scalar_t>::infinity();
     at::Tensor aligned = at::full({batch_input_len, num_batches, batch_output_len}, neg_inf,
@@ -72,7 +73,7 @@ make_aligned_inputs_gpu(
     dim3 block_dim(1, 32, 16); // b, t, s
     dim3 grid_dim(num_batches, (batch_input_len + 31) / 32, (batch_output_len + 15) / 16);
     make_aligned_inputs_kernel<scalar_t>
-            <<<grid_dim, block_dim>>>
+            <<<grid_dim, block_dim, 0, stream>>>
             (
                     aligned.data<scalar_t>(),
                     inputs.data<scalar_t>(),
@@ -112,7 +113,8 @@ make_aligned_inputs_gpu<float>(
         at::Tensor &output_lengths,
         int64_t batch_input_len,
         int64_t num_batches,
-        int64_t batch_output_len
+        int64_t batch_output_len,
+        cudaStream_t stream
 );
 
 template
@@ -124,7 +126,8 @@ make_aligned_inputs_gpu<double>(
         at::Tensor &output_lengths,
         int64_t batch_input_len,
         int64_t num_batches,
-        int64_t batch_output_len
+        int64_t batch_output_len,
+        cudaStream_t stream
 );
 
 
@@ -187,7 +190,8 @@ make_aligned_transition_gpu(
         at::Tensor &input_lengths,
         at::Tensor &output_lengths,
         int64_t num_batches,
-        int64_t batch_output_len
+        int64_t batch_output_len,
+        cudaStream_t stream
 ) {
     at::Tensor aligned = at::zeros({2, num_batches, batch_output_len}, transition.options().requires_grad(false));
 
@@ -195,7 +199,7 @@ make_aligned_transition_gpu(
     dim3 grid_dim((num_batches + 7) / 8, (batch_output_len + 63) / 64, 1);
 
     make_aligned_transition_kernel<scalar_t>
-             <<<grid_dim, block_dim>>>
+             <<<grid_dim, block_dim, 0, stream>>>
             (
                     aligned.data<scalar_t>(),
                     transition.data<scalar_t>(),
@@ -230,7 +234,8 @@ make_aligned_transition_gpu<float>(
         at::Tensor &input_lengths,
         at::Tensor &output_lengths,
         int64_t num_batches,
-        int64_t batch_output_len
+        int64_t batch_output_len,
+        cudaStream_t stream
 );
 
 template
@@ -241,7 +246,8 @@ make_aligned_transition_gpu<double>(
         at::Tensor &input_lengths,
         at::Tensor &output_lengths,
         int64_t num_batches,
-        int64_t batch_output_len
+        int64_t batch_output_len,
+        cudaStream_t stream
 );
 
 template<typename scalar_t>
@@ -297,16 +303,15 @@ collect_transition_grad_kernel(
 
 
 template<typename scalar_t>
-at::Tensor
-collect_transition_grad_gpu(
+void collect_transition_grad_gpu(
+        at::Tensor &transition_grad,
         at::Tensor &aligned_transition_grad,
         at::Tensor &outputs,
         at::Tensor &output_lengths,
         int64_t num_batches,
-        int64_t num_labels
+        int64_t num_labels,
+        cudaStream_t stream
 ) {
-    at::Tensor transition_grad = at::zeros({num_labels, num_labels},
-                                           aligned_transition_grad.options().requires_grad(false));
 
     int64_t batch_output_len = outputs.size(1);
 
@@ -314,7 +319,7 @@ collect_transition_grad_gpu(
     dim3 grid_dim((num_batches + 7) / 8, (batch_output_len + 63) / 64, 1);
 
     collect_transition_grad_kernel<scalar_t>
-             <<<grid_dim, block_dim>>>
+             <<<grid_dim, block_dim, 0, stream>>>
             (
                     transition_grad.data<scalar_t>(),
                     aligned_transition_grad.data<scalar_t>(),
@@ -336,28 +341,28 @@ collect_transition_grad_gpu(
                     num_batches,
                     batch_output_len
             );
-
-    return transition_grad;
 }
 
 template
-at::Tensor
-collect_transition_grad_gpu<float>(
+void collect_transition_grad_gpu<float>(
+        at::Tensor &transition_grad,
         at::Tensor &aligned_transition_grad,
         at::Tensor &outputs,
         at::Tensor &output_lengths,
         int64_t num_batches,
-        int64_t num_labels
+        int64_t num_labels,
+        cudaStream_t stream
 );
 
 template
-at::Tensor
-collect_transition_grad_gpu<double>(
+void collect_transition_grad_gpu<double>(
+        at::Tensor &transition_grad,
         at::Tensor &aligned_transition_grad,
         at::Tensor &outputs,
         at::Tensor &output_lengths,
         int64_t num_batches,
-        int64_t num_labels
+        int64_t num_labels,
+        cudaStream_t stream
 );
 
 template<typename scalar_t>
@@ -418,26 +423,24 @@ collect_input_grad_kernel(
 
 
 template<typename scalar_t>
-at::Tensor
-collect_input_grad_gpu(
+void collect_input_grad_gpu(
+        at::Tensor &inputs_grad,
         at::Tensor &aligned_input_grad,
         at::Tensor &outputs,
         at::Tensor &input_lengths,
         at::Tensor &output_lengths,
         int64_t batch_input_len,
         int64_t num_batches,
-        int64_t num_labels
+        int64_t num_labels,
+        cudaStream_t stream
 ) {
-    at::Tensor inputs_grad = at::zeros({batch_input_len, num_batches, num_labels},
-                                       aligned_input_grad.options().requires_grad(false));
-
     int64_t batch_output_len = outputs.size(1);
 
     dim3 block_dim(1, 32, 16); // b, t, s
     dim3 grid_dim(num_batches, (batch_input_len + 31) / 32, (batch_output_len + 15) / 16);
 
     collect_input_grad_kernel<scalar_t>
-             <<<grid_dim, block_dim>>>
+             <<<grid_dim, block_dim, 0, stream>>>
             (
                     inputs_grad.data<scalar_t>(),
                     aligned_input_grad.data<scalar_t>(),
@@ -464,32 +467,32 @@ collect_input_grad_gpu(
                     num_batches,
                     batch_output_len
             );
-
-    return inputs_grad;
 }
 
 template
-at::Tensor
-collect_input_grad_gpu<float>(
+void collect_input_grad_gpu<float>(
+        at::Tensor &inputs_grad,
         at::Tensor &aligned_input_grad,
         at::Tensor &outputs,
         at::Tensor &input_lengths,
         at::Tensor &output_lengths,
         int64_t batch_input_len,
         int64_t num_batches,
-        int64_t num_labels
+        int64_t num_labels,
+        cudaStream_t stream
 );
 
 template
-at::Tensor
-collect_input_grad_gpu<double>(
+void collect_input_grad_gpu<double>(
+        at::Tensor &inputs_grad,
         at::Tensor &aligned_input_grad,
         at::Tensor &outputs,
         at::Tensor &input_lengths,
         at::Tensor &output_lengths,
         int64_t batch_input_len,
         int64_t num_batches,
-        int64_t num_labels
+        int64_t num_labels,
+        cudaStream_t stream
 );
 
 }

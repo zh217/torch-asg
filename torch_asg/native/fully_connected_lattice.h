@@ -9,6 +9,35 @@
 
 namespace torch_asg {
 
+void fully_connected_alpha_recursion(
+        at::Tensor &alpha,
+        at::Tensor &path_contrib,
+        at::Tensor &inputs,
+        at::Tensor &transition,
+        int64_t batch_input_len,
+        int64_t num_batches,
+        int64_t num_labels
+);
+
+void fully_connected_beta_recursion(
+        at::Tensor &beta,
+        at::Tensor &inputs,
+        at::Tensor &transition,
+        int64_t batch_input_len,
+        int64_t num_batches,
+        int64_t num_labels
+);
+
+std::tuple<at::Tensor, at::Tensor>
+fully_connected_derivative(
+        at::Tensor &grad_out,
+        at::Tensor &gamma,
+        at::Tensor &path_contrib,
+        int64_t batch_input_len,
+        int64_t num_batches,
+        int64_t num_labels
+);
+
 std::tuple<at::Tensor, at::Tensor, at::Tensor, at::Tensor>
 fully_connected_forward(
         at::Tensor &inputs,

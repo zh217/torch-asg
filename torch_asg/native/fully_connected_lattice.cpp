@@ -6,20 +6,16 @@
 
 namespace torch_asg {
 
-std::tuple<at::Tensor, at::Tensor>
-fully_connected_alpha_recursion(
+void fully_connected_alpha_recursion(
+        at::Tensor &alpha,
+        at::Tensor &path_contrib,
         at::Tensor &inputs,
         at::Tensor &transition,
         int64_t batch_input_len,
         int64_t num_batches,
         int64_t num_labels
 ) {
-    constexpr auto neg_inf = -std::numeric_limits<double>::infinity();
     auto transition_e = transition.view({1, num_labels, num_labels}).contiguous();
-    auto alpha = at::full({batch_input_len, num_batches, num_labels}, neg_inf,
-                          inputs.options().requires_grad(false));
-    auto path_contrib = at::zeros({batch_input_len - 1, num_batches, num_labels, num_labels},
-                                  inputs.options().requires_grad(false));
 
     alpha[0] = inputs[0];
 
@@ -30,29 +26,24 @@ fully_connected_alpha_recursion(
         path_contrib[t - 1] = tmp;
         alpha[t] = tmp.logsumexp(2);
     }
-    return {alpha, path_contrib};
 }
 
 
-at::Tensor
-fully_connected_beta_recursion(
+void fully_connected_beta_recursion(
+        at::Tensor &beta,
         at::Tensor &inputs,
         at::Tensor &transition,
         int64_t batch_input_len,
         int64_t num_batches,
         int64_t num_labels
 ) {
-    constexpr auto neg_inf = -std::numeric_limits<double>::infinity();
     auto transition_t = transition.t().view({1, num_labels, num_labels}).contiguous();
-    auto beta = at::full({batch_input_len, num_batches, num_labels}, neg_inf, inputs.options().requires_grad(false));
 
     beta[batch_input_len - 1].fill_(0);
 
     for (int64_t t = batch_input_len - 2; t >= 0; --t) {
         beta[t] = (transition_t + (inputs[t + 1] + beta[t + 1]).view({num_batches, 1, num_labels})).logsumexp(2);
     }
-
-    return beta;
 }
 
 std::tuple<at::Tensor, at::Tensor>
@@ -80,15 +71,20 @@ fully_connected_forward(
         int64_t num_batches,
         int64_t num_labels
 ) {
+    constexpr auto neg_inf = -std::numeric_limits<double>::infinity();
+    auto alpha = at::full({batch_input_len, num_batches, num_labels}, neg_inf,
+                          inputs.options().requires_grad(false));
+    auto path_contrib = at::zeros({batch_input_len - 1, num_batches, num_labels, num_labels},
+                                  inputs.options().requires_grad(false));
+    auto beta = at::full({batch_input_len, num_batches, num_labels}, neg_inf, inputs.options().requires_grad(false));
+
     at::Tensor input_lengths_cpu = input_lengths.is_cuda() ? input_lengths.to(at::kCPU, false, true) : input_lengths;
     bool should_roll = should_roll_to_end(input_lengths_cpu, batch_input_len);
 
-    auto alpha_results = fully_connected_alpha_recursion(inputs, transition, batch_input_len, num_batches, num_labels);
-    auto alpha = std::get<0>(alpha_results);
-    auto path_contrib = std::get<1>(alpha_results);
+    fully_connected_alpha_recursion(alpha, path_contrib, inputs, transition, batch_input_len, num_batches, num_labels);
 
     at::Tensor input_aligned = should_roll ? roll_to_end(inputs, input_lengths_cpu) : inputs;
-    auto beta = fully_connected_beta_recursion(input_aligned, transition, batch_input_len, num_batches, num_labels);
+    fully_connected_beta_recursion(beta, input_aligned, transition, batch_input_len, num_batches, num_labels);
     beta = should_roll ? roll_to_end(beta, input_lengths_cpu, true) : beta;
     auto forward_scores = (beta[0] + inputs[0]).logsumexp(1);
     return {forward_scores, alpha, beta, path_contrib};

@@ -42,8 +42,8 @@ make_aligned_transition_gpu(
 }
 
 template<typename scalar_t>
-at::Tensor
-collect_transition_grad_gpu(
+void collect_transition_grad_gpu(
+        at::Tensor &transition_grad,
         at::Tensor &aligned_transition_grad,
         at::Tensor &outputs,
         at::Tensor &output_lengths,
@@ -54,8 +54,8 @@ collect_transition_grad_gpu(
 }
 
 template<typename scalar_t>
-at::Tensor
-collect_input_grad_gpu(
+void collect_input_grad_gpu(
+        at::Tensor &input_grad,
         at::Tensor &aligned_input_grad,
         at::Tensor &outputs,
         at::Tensor &input_lengths,

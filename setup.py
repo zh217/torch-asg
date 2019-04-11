@@ -14,6 +14,7 @@ if torch.cuda.is_available():
                                            'torch_asg/native/force_aligned_lattice.cpp',
                                            'torch_asg/native/fully_connected_lattice.cpp',
                                            'torch_asg/native/extension.cpp',
+                                           'torch_asg/native/streamlined_fast_gpu.cpp',
                                            'torch_asg/native/force_aligned_lattice_kernel.cu'],
                                   extra_compile_args={
                                       'cxx': ['-O2',
