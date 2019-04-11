@@ -13,6 +13,14 @@
 
 namespace torch_asg {
 
+inline void _block_waiters(at::cuda::CUDAStream waitee, std::initializer_list<at::cuda::CUDAStream> waiters) {
+    at::cuda::CUDAEvent sync{};
+    sync.record(waitee);
+    for (auto &waiter :waiters) {
+        sync.block(waiter);
+    }
+}
+
 at::Tensor
 fast_asg_gpu_forward_only(
         at::Tensor &inputs,
@@ -35,10 +43,8 @@ fast_asg_gpu_forward_only(
     at::cuda::CUDAStream stream1 = at::cuda::getCurrentCUDAStream();
     at::cuda::CUDAStream stream2 = at::cuda::getStreamFromPool();
 
-    at::cuda::CUDAEvent first_sync{};
-
-    first_sync.record(stream1);
-    first_sync.block(stream2);
+    // pooled stream waits for default stream
+    _block_waiters(stream1, {stream2});
 
     // calculate fully connected beta and collect the score
 
@@ -78,10 +84,8 @@ fast_asg_gpu_forward_only(
 
     auto forward_scores_aligned = beta_aligned[0].permute({1, 0})[0] + aligned_inputs[0].permute({1, 0})[0];
 
-    at::cuda::CUDAEvent second_sync{};
-
-    second_sync.record(stream2);
-    second_sync.block(stream1);
+    // default stream waits for pooled stream
+    _block_waiters(stream2, {stream1});
 
     at::cuda::setCurrentCUDAStream(stream1);
 
@@ -119,13 +123,10 @@ fast_asg_gpu_forward(
     at::cuda::CUDAStream stream_aligned_beta = at::cuda::getStreamFromPool();
     at::cuda::CUDAStream stream_aligned_alpha = at::cuda::getStreamFromPool();
 
-    at::cuda::CUDAEvent init_sync{};
-
-    init_sync.record(stream_full_beta);
-
-    init_sync.block(stream_full_alpha);
-    init_sync.block(stream_aligned_beta);
-    init_sync.block(stream_aligned_alpha);
+    // all pooled streams wait for default stream
+    _block_waiters(stream_full_beta, {stream_full_alpha,
+                                      stream_aligned_beta,
+                                      stream_aligned_alpha});
 
     // full beta
 
@@ -152,22 +153,19 @@ fast_asg_gpu_forward(
     fully_connected_alpha_recursion(alpha_full, path_contrib_full, inputs, transition, batch_input_len, num_batches,
                                     num_labels);
 
-    at::cuda::CUDAEvent full_final_sync{};
-    full_final_sync.record(stream_full_beta);
-    full_final_sync.block(stream_full_alpha);
+    // we are using full_alpha, so we wait for full_beta
+    _block_waiters(stream_full_beta, {stream_full_alpha});
 
     auto gamma_full = beta_full + alpha_full;
 
     // aligned preparation
-
-    at::cuda::setCurrentCUDAStream(stream_aligned_beta);
 
     at::Tensor aligned_inputs = MY_DISPATCH_FLOAT(make_aligned_inputs_gpu,
                                                   inputs, outputs,
                                                   input_lengths, output_lengths,
                                                   batch_input_len,
                                                   num_batches, batch_output_len,
-                                                  stream_aligned_beta);
+                                                  stream_aligned_alpha);
 
     at::Tensor aligned_transition = MY_DISPATCH_FLOAT(make_aligned_transition_gpu,
                                                       transition, outputs,
@@ -175,11 +173,13 @@ fast_asg_gpu_forward(
                                                       num_batches, batch_output_len,
                                                       stream_aligned_beta);
 
-    at::cuda::CUDAEvent aligned_sync{};
-    aligned_sync.record(stream_aligned_beta);
-    aligned_sync.block(stream_aligned_alpha);
+    // let aligned_alpha, aligned_beta wait for each other
+    _block_waiters(stream_aligned_beta, {stream_aligned_alpha});
+    _block_waiters(stream_aligned_alpha, {stream_aligned_beta});
 
     // aligned beta
+
+    at::cuda::setCurrentCUDAStream(stream_aligned_beta);
 
     auto aligned_inputs_rolled = should_roll ? roll_to_end(aligned_inputs, input_lengths_cpu) : aligned_inputs;
 
@@ -209,27 +209,20 @@ fast_asg_gpu_forward(
                                   batch_input_len, num_batches, batch_output_len);
 
 
-    at::cuda::CUDAEvent aligned_final_sync{};
-    aligned_final_sync.record(stream_aligned_beta);
-    aligned_final_sync.block(stream_aligned_alpha);
+    // we are still on alpha, so we wait for beta
+    _block_waiters(stream_aligned_beta, {stream_aligned_alpha});
 
     auto gamma_aligned = alpha_aligned + beta_aligned;
 
     // finalization
 
+    // go back to default stream
     at::cuda::setCurrentCUDAStream(stream_full_beta);
 
-    at::cuda::CUDAEvent final_sync_f_a{};
-    at::cuda::CUDAEvent final_sync_a_b{};
-    at::cuda::CUDAEvent final_sync_a_a{};
-
-    final_sync_f_a.record(stream_full_alpha);
-    final_sync_a_b.record(stream_aligned_beta);
-    final_sync_a_a.record(stream_aligned_alpha);
-
-    final_sync_f_a.block(stream_full_beta);
-    final_sync_a_b.block(stream_full_beta);
-    final_sync_a_a.block(stream_full_beta);
+    // default stream waits for everyone
+    _block_waiters(stream_full_alpha, {stream_full_beta});
+    _block_waiters(stream_aligned_beta, {stream_full_beta});
+    _block_waiters(stream_aligned_alpha, {stream_full_beta});
 
     return {forward_scores_full, forward_scores_aligned,
             gamma_full, gamma_aligned,
@@ -260,9 +253,8 @@ fast_asg_gpu_backward(
     at::cuda::CUDAStream stream1 = at::cuda::getCurrentCUDAStream();
     at::cuda::CUDAStream stream2 = at::cuda::getStreamFromPool();
 
-    at::cuda::CUDAEvent init_sync{};
-    init_sync.record(stream1);
-    init_sync.block(stream2);
+    // pooled waits for default
+    _block_waiters(stream1, {stream2});
 
     at::cuda::setCurrentCUDAStream(stream1);
 
@@ -278,13 +270,9 @@ fast_asg_gpu_backward(
     auto aligned_inputs_grad = std::get<0>(aligned_grad_results);
     auto aligned_transition_grad = std::get<1>(aligned_grad_results);
 
-    at::cuda::CUDAEvent mid_sync_1{};
-    mid_sync_1.record(stream1);
-    mid_sync_1.block(stream2);
-
-    at::cuda::CUDAEvent mid_sync_2{};
-    mid_sync_2.record(stream2);
-    mid_sync_2.block(stream1);
+    // two streams synchronize
+    _block_waiters(stream1, {stream2});
+    _block_waiters(stream2, {stream1});
 
     MY_DISPATCH_FLOAT(collect_input_grad_gpu,
                       grad_inputs,
@@ -298,10 +286,10 @@ fast_asg_gpu_backward(
                       output_lengths, num_batches, num_labels,
                       stream2);
 
-    at::cuda::CUDAEvent final_sync{};
-    final_sync.record(stream2);
-    final_sync.block(stream1);
+    // default waits for pooled
+    _block_waiters(stream2, {stream1});
 
+    // go back to default
     at::cuda::setCurrentCUDAStream(stream1);
 
     return {grad_transition, grad_inputs};
