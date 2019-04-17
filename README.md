@@ -88,7 +88,7 @@ There are two options for the loss constructor that warrants further explanation
   this parameter to true, and then CUDA kernel launches are serial. Useful for debugging.
 * `forward_only`: by default, our implementation does quite a lot of work during the forward pass concurrently that is
   only useful for calculating the gradients. If you don't need the gradient, setting this parameter to true will give
-  a further speed boost.
+  a further speed boost. Note that the forward-only mode is automatically active when your model is in evaluation mode.
   
 Compared to Facebook's implementation, we have also omitted scaling based on input/output lengths. If you need it, you
 can do it yourself by using the `None` reduction and scale the individual scores before summing/averaging.
