@@ -2,7 +2,7 @@
 // Created by amade on 4/11/2019.
 //
 
-#include <ATen/cuda/CUDAStream.h>
+#include <c10/cuda/CUDAStream.h>
 #include <ATen/cuda/CUDAEvent.h>
 #include <cuda_runtime.h>
 
