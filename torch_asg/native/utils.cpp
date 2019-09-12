@@ -25,7 +25,7 @@ should_roll_to_end(
         int64_t batch_input_len
 ) {
     if (input_lengths.dim() > 0) {
-        AT_ASSERT(input_lengths.dtype() == at::kLong)
+        AT_ASSERT(input_lengths.dtype() == at::kLong);
         auto num_batches = input_lengths.size(0);
         auto input_lengths_a = input_lengths.accessor<int64_t, 1>();
         for (int64_t b = 0; b < num_batches; ++b) {
