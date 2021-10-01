@@ -260,7 +260,7 @@ fast_asg_gpu_backward(
 
     auto grad_inputs = masked_softmax(gamma_full, 2) * grad_out_full.view({1, num_batches, 1});
     auto grad_transition = (grad_inputs.slice(0, 1).view({batch_input_len - 1, num_batches, num_labels, 1}) *
-                            masked_softmax(path_contrib_full, 3)).sum({0, 1});
+                            masked_softmax(path_contrib_full, 3)).sum(std::vector<int64_t>({0, 1}));
 
     at::cuda::setCurrentCUDAStream(stream2);
 
@@ -292,7 +292,7 @@ fast_asg_gpu_backward(
     // go back to default
     at::cuda::setCurrentCUDAStream(stream1);
 
-    return {grad_transition, grad_inputs};
+    return std::tuple<at::Tensor, at::Tensor>({grad_transition, grad_inputs});
 
 }
 
